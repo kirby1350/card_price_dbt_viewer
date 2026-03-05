@@ -1,0 +1,4 @@
+name: main_marts
+type: duckdb
+options:
+  filename: ../../../data/raw.duckdb

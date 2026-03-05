@@ -1,0 +1,32 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Data (large binary files - run dbt to regenerate)
+data/raw.duckdb
+data/raw.duckdb.wal
+data/*.log
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# Evidence
+evidence/node_modules/
+evidence/build/
+evidence/.evidence/
+evidence/logs/
+
+# Evidence source symlinks (use relative path in connection.yaml instead)
+evidence/sources/*/raw.duckdb
+
+# IDE
+.idea/
+
+# OS
+.DS_Store

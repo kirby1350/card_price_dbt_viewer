@@ -1,0 +1,26 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw data landed by crawlers into DuckDB"
+    schema: main
+    tables:
+      - name: raw_official_cards
+        description: "Official card list data crawled from TCG official sources"
+        columns:
+          - name: tcg
+            description: "TCG identifier: yugioh | zx"
+          - name: card_number
+            description: "Card number as printed on the card"
+          - name: numbering_scheme
+            description: "shared_official | unique_per_rarity | shared_no_official"
+          - name: card_base_id
+            description: "Groups cards that are the same logical card across different numbers (used in unique_per_rarity scheme)"
+
+      - name: raw_shop_listings
+        description: "Shop price listings crawled from various card shops"
+        columns:
+          - name: card_number_raw
+            description: "Card number as displayed by the shop (may differ from official)"
+          - name: rarity_raw
+            description: "Rarity string as displayed by the shop (requires mapping to canonical)"

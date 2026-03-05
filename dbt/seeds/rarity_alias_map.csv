@@ -1,0 +1,36 @@
+tcg,shop,shop_rarity_raw,canonical_rarity_code,canonical_rarity_name,notes
+yugioh,,Common,C,Common,
+yugioh,,Rare,R,Rare,
+yugioh,,Super Rare,SR,Super Rare,
+yugioh,,Ultra Rare,UR,Ultra Rare,
+yugioh,,Secret Rare,ScR,Secret Rare,
+yugioh,,Prismatic Secret Rare,PScR,Prismatic Secret Rare,
+yugioh,,Quarter Century Secret Rare,QCScR,Quarter Century Secret Rare,
+yugioh,,Ultimate Rare,UtR,Ultimate Rare,
+yugioh,,Ghost Rare,GR,Ghost Rare,
+zx,,N,N,Normal,
+zx,,R,R,Rare,
+zx,,SR,SR,Super Rare,
+zx,,VR,VR,Very Rare,
+zx,,LR,LR,Lrig Rare,
+zx,bigweb,ノーマル,N,Normal,Bigweb Japanese rarity name
+zx,bigweb,ノーマル【ホロ】,NH,Normal Holo,Bigweb holo normal
+zx,bigweb,レア,R,Rare,Bigweb Japanese rarity name
+zx,bigweb,レア【ホロ】,RH,Rare Holo,Bigweb holo rare
+zx,bigweb,アンコモン,UC,Uncommon,Bigweb Japanese rarity name
+zx,bigweb,アンコモン【ホロ】,UCH,Uncommon Holo,Bigweb holo uncommon
+zx,bigweb,コモン,C,Common,Bigweb Japanese rarity name
+zx,bigweb,コモン【ホロ】,CH,Common Holo,Bigweb holo common
+zx,bigweb,スーパーレア,SR,Super Rare,Bigweb Japanese rarity name
+zx,bigweb,スーパーレア【パラレル】,SRH,Super Rare Holo,Bigweb parallel super rare
+zx,bigweb,スーパーレア【ホログラム】,SRH,Super Rare Holo,Bigweb hologram super rare
+zx,bigweb,ゼクスレア,Z/XR,Z/X Rare,Bigweb Z/X Rare
+zx,bigweb,ヒロイックレア,HR,Heroic Rare,Bigweb Heroic Rare
+zx,bigweb,ヒロイックレア【ホロ】,HR,Heroic Rare,Bigweb holo heroic rare
+zx,bigweb,日本一レア,日本一R,Japan No.1 Rare,Bigweb Japan No.1 Rare
+zx,bigweb,パラレル,PR,Parallel,Bigweb parallel foil
+zx,bigweb,ﾊﾟﾗﾚﾙﾎﾛ,PRH,Parallel Holo,Bigweb parallel holo
+zx,bigweb,プロモ,PR,Promo,Bigweb promo card
+zx,bigweb,プロモ【ホロ】,PRH,Promo Holo,Bigweb holo promo
+zx,bigweb,マーカー,F,Marker,Bigweb marker card
+zx,bigweb,CR【ホログラム】,RH,Color Rare Holo,Bigweb color rare holo

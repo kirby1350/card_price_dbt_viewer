@@ -1,0 +1,7 @@
+card_price:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', '../data/raw.duckdb') }}"
+      threads: 4
