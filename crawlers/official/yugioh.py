@@ -65,6 +65,7 @@ from typing import Iterator
 
 import requests
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 from crawlers.official.base import OfficialCard, OfficialCrawler
 from crawlers.storage import (
@@ -276,7 +277,7 @@ class YugiohOfficialCrawler(OfficialCrawler):
         card_list = self._fetch_card_list(set_info)
         logger.info("  %d cards in card list", len(card_list))
 
-        for card in card_list:
+        for card in tqdm(card_list, desc=set_name[:40], unit="card", leave=False):
             cid = card["cid"]
             card_name = card["card_name"]
 
@@ -337,7 +338,7 @@ class YugiohOfficialCrawler(OfficialCrawler):
             len(done_pids), len(all_sets), len(to_crawl),
         )
 
-        for set_info in to_crawl:
+        for set_info in tqdm(to_crawl, desc="Sets", unit="set"):
             pid = set_info["pid"]
             batch: list[dict] = []
             count = 0

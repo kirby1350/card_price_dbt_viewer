@@ -12,6 +12,7 @@ dbt-core>=1.9
 dbt-duckdb>=1.9
 
 # Utilities
+tqdm>=4.66
 python-dotenv>=1.0
 pydantic>=2.10
 schedule>=1.2             # periodic crawl scheduling
