@@ -262,6 +262,19 @@ class ZXOfficialCrawler(OfficialCrawler):
             illust_text = illust_el.get_text(strip=True)
             illustrator = illust_text.removeprefix("Illustrator.").strip()
 
+        # Card image: second <div> inside <div class="pic"> (first is the rarity icon)
+        image_url = ""
+        pic_div = section.find("div", class_="pic")
+        if pic_div:
+            for div in pic_div.find_all("div", recursive=False):
+                if "rarity" not in div.get("class", []):
+                    img = div.find("img")
+                    if img:
+                        src = img.get("src", "")
+                        if src:
+                            image_url = f"{ZX_BASE}{src}" if src.startswith("/") else src
+                    break
+
         extra: dict = {
             "section_id": section_id,
             "art_index": art_index,
@@ -271,6 +284,7 @@ class ZXOfficialCrawler(OfficialCrawler):
             "tribe": tribe,
             "illustrator": illustrator,
             "abilities": abilities,
+            "image_url": image_url,
         }
 
         return OfficialCard(
@@ -403,14 +417,14 @@ class ZXOfficialCrawler(OfficialCrawler):
         # ---- 2. Persist metadata ----
         if new_sets:
             conn.executemany(
-                "INSERT INTO zx_sets (set_code, set_name, set_full_value, pn_param) VALUES (?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO zx_sets (set_code, set_name, set_full_value, pn_param) VALUES (?, ?, ?, ?)",
                 [(s.set_code, s.set_name, s.set_full_value, s.pn_param) for s in new_sets],
             )
             logger.info("Stored %d new sets", len(new_sets))
 
         if new_rarities:
             conn.executemany(
-                "INSERT INTO zx_rarities (rarity_code, rr_param) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO zx_rarities (rarity_code, rr_param) VALUES (?, ?)",
                 new_rarities,
             )
             logger.info("Stored %d new rarities", len(new_rarities))

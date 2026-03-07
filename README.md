@@ -2,7 +2,7 @@
 
 A card price tracking and visualization system for TCG cards. Crawlers scrape official card lists and shop prices, dbt transforms the raw data into analytics-ready models, and Evidence.dev renders a price dashboard.
 
-**Supported TCGs:** Yu-Gi-Oh (OCG/JP), Z/X -Zillions of enemy X-
+**Supported TCGs:** Yu-Gi-Oh (OCG/JP), Z/X -Zillions of enemy X-, Cardfight!! Vanguard, Weiss Schwarz
 
 **Stack:** Python 3.12, DuckDB, dbt-duckdb, Evidence.dev
 
@@ -44,6 +44,10 @@ python main.py crawl zx-official               # all Z/X sets (~300 sets, severa
 python main.py crawl zx-official --set B01     # single set (testing)
 python main.py crawl yugioh-official           # all YuGiOh sets (~1,400 sets)
 python main.py crawl yugioh-official --set <pid>
+python main.py crawl vanguard-official         # all Vanguard expansions
+python main.py crawl vanguard-official --set DZ-BT13
+python main.py crawl weiss-official            # all Weiss Schwarz expansions
+python main.py crawl weiss-official --set 29   # single expansion by numeric ID
 
 # Shop prices
 python main.py crawl yuyutei-zx                # YuYuTei Z/X listings
@@ -56,6 +60,27 @@ python main.py crawl <target> --debug          # enable DEBUG logging
 ```
 
 Raw data is stored in `data/raw.duckdb`. Each crawler skips sets that have already been successfully crawled.
+
+### Running crawlers in parallel
+
+DuckDB allows only one writer at a time. To run multiple official crawlers simultaneously, write each to a separate file then merge:
+
+```bash
+# Step 1 — launch each crawler with its own DB file (run in separate terminals or with & on Linux/macOS)
+python main.py crawl zx-official      --db data/raw_zx.duckdb
+python main.py crawl yugioh-official  --db data/raw_yugioh.duckdb
+python main.py crawl vanguard-official --db data/raw_vanguard.duckdb
+python main.py crawl weiss-official   --db data/raw_weiss.duckdb
+
+# Step 2 — merge all raw_*.duckdb files into data/raw.duckdb
+python main.py merge
+```
+
+The `merge` command attaches each source file read-only and uses `INSERT OR REPLACE` so it is safe to re-run. You can also specify files and target explicitly:
+
+```bash
+python main.py merge data/raw_zx.duckdb data/raw_yugioh.duckdb --into data/raw.duckdb
+```
 
 ## Running dbt
 
@@ -93,6 +118,8 @@ crawlers/
     base.py          # OfficialCard dataclass + OfficialCrawler ABC
     zx.py            # Z/X official crawler
     yugioh.py        # Yu-Gi-Oh OCG crawler (db.yugioh-card.com)
+    vanguard.py      # Cardfight!! Vanguard crawler (cf-vanguard.com)
+    weiss.py         # Weiss Schwarz crawler (ws-tcg.com)
   shops/
     base.py          # ShopListing dataclass + ShopCrawler ABC
     yuyutei.py       # YuYuTei shop crawler

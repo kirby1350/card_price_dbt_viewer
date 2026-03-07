@@ -221,6 +221,11 @@ class YugiohOfficialCrawler(OfficialCrawler):
             return self._detail_cache[cid]
 
         soup = self._get(CARD_SEARCH_URL, params={"ope": "2", "cid": cid})
+
+        # Card image URL is in the og:image meta tag (includes a signed enc token)
+        og_image = soup.find("meta", property="og:image")
+        image_url = og_image.get("content", "") if og_image else ""
+
         appearances = []
         for row in soup.find_all("div", class_="t_row"):
             link_input = row.find("input", class_="link_value")
@@ -251,6 +256,7 @@ class YugiohOfficialCrawler(OfficialCrawler):
                 "rarity_code": rarity_code,
                 "rarity_name": rarity_name,
                 "pack_name": pack_name,
+                "image_url": image_url,
             })
 
         self._detail_cache[cid] = appearances
@@ -308,6 +314,7 @@ class YugiohOfficialCrawler(OfficialCrawler):
                         "pack_name": app["pack_name"],
                         "packc": set_info.get("packc", ""),
                         "release_date": set_info.get("release_date", ""),
+                        "image_url": app.get("image_url", ""),
                     },
                 )
 
