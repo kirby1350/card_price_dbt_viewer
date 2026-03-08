@@ -12,7 +12,7 @@ def main() -> None:
     crawl_p = sub.add_parser("crawl", help="Run a crawler")
     crawl_p.add_argument(
         "target",
-        choices=["zx-official", "yugioh-official", "vanguard-official", "weiss-official", "yuyutei-zx", "yuyutei-ygo", "bigweb-zx"],
+        choices=["zx-official", "yugioh-official", "vanguard-official", "weiss-official", "digimon-official", "unionarena-official", "yuyutei-zx", "yuyutei-ygo", "bigweb-zx"],
         help="Which crawler to run",
     )
     crawl_p.add_argument("--delay", type=float, default=1.0, help="Seconds between requests")
@@ -176,6 +176,72 @@ def main() -> None:
             else:
                 crawler.run_full_crawl(db_path=db_path)
 
+        elif args.target == "digimon-official":
+            from crawlers.official.digimon import DigimonOfficialCrawler, _init_digimon_schema
+
+            crawler = DigimonOfficialCrawler(delay=args.delay)
+
+            if args.set_code:
+                import json
+                from crawlers.storage import get_connection, init_schema, insert_official_cards
+
+                conn = get_connection(db_path)
+                init_schema(conn)
+                _init_digimon_schema(conn)
+
+                batch = []
+                for card in crawler.crawl_cards(args.set_code):
+                    batch.append({
+                        "tcg": card.tcg,
+                        "set_code": card.set_code,
+                        "set_name": card.set_name,
+                        "card_number": card.card_number,
+                        "card_name": card.card_name,
+                        "rarity_code": card.rarity_code,
+                        "rarity_name": card.rarity_name,
+                        "numbering_scheme": card.numbering_scheme,
+                        "card_base_id": card.card_base_id,
+                        "extra": json.dumps(card.extra, ensure_ascii=False),
+                    })
+                insert_official_cards(conn, batch)
+                conn.close()
+                print(f"Saved {len(batch)} card editions for category {args.set_code}")
+            else:
+                crawler.run_full_crawl(db_path=db_path)
+
+        elif args.target == "unionarena-official":
+            from crawlers.official.unionarena import UnionArenaOfficialCrawler, _init_unionarena_schema
+
+            crawler = UnionArenaOfficialCrawler(delay=args.delay)
+
+            if args.set_code:
+                import json
+                from crawlers.storage import get_connection, init_schema, insert_official_cards
+
+                conn = get_connection(db_path)
+                init_schema(conn)
+                _init_unionarena_schema(conn)
+
+                batch = []
+                for card in crawler.crawl_cards(args.set_code):
+                    batch.append({
+                        "tcg": card.tcg,
+                        "set_code": card.set_code,
+                        "set_name": card.set_name,
+                        "card_number": card.card_number,
+                        "card_name": card.card_name,
+                        "rarity_code": card.rarity_code,
+                        "rarity_name": card.rarity_name,
+                        "numbering_scheme": card.numbering_scheme,
+                        "card_base_id": card.card_base_id,
+                        "extra": json.dumps(card.extra, ensure_ascii=False),
+                    })
+                insert_official_cards(conn, batch)
+                conn.close()
+                print(f"Saved {len(batch)} card editions for series {args.set_code}")
+            else:
+                crawler.run_full_crawl(db_path=db_path)
+
         elif args.target == "weiss-official":
             from crawlers.official.weiss import WeissOfficialCrawler, _init_weiss_schema
 
@@ -299,6 +365,8 @@ def _run_merge(args) -> None:
     from crawlers.official.yugioh import _init_yugioh_schema
     from crawlers.official.vanguard import init_vanguard_schema
     from crawlers.official.weiss import _init_weiss_schema
+    from crawlers.official.digimon import _init_digimon_schema
+    from crawlers.official.unionarena import _init_unionarena_schema
 
     target = Path(args.target) if args.target else DB_PATH
 
@@ -320,9 +388,11 @@ def _run_merge(args) -> None:
     _init_yugioh_schema(conn)
     init_vanguard_schema(conn)
     _init_weiss_schema(conn)
+    _init_digimon_schema(conn)
+    _init_unionarena_schema(conn)
 
     # TCG-specific tables that may exist in source files
-    tcg_tables = ["zx_sets", "zx_rarities", "zx_card_name_groups", "yugioh_sets", "vanguard_sets", "weiss_sets"]
+    tcg_tables = ["zx_sets", "zx_rarities", "zx_card_name_groups", "yugioh_sets", "vanguard_sets", "weiss_sets", "digimon_sets", "ua_titles", "ua_sets"]
 
     for i, src in enumerate(sources):
         if not src.exists():

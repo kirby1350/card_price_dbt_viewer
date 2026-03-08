@@ -2,7 +2,7 @@
 
 A card price tracking and visualization system for TCG cards. Crawlers scrape official card lists and shop prices, dbt transforms the raw data into analytics-ready models, and Evidence.dev renders a price dashboard.
 
-**Supported TCGs:** Yu-Gi-Oh (OCG/JP), Z/X -Zillions of enemy X-, Cardfight!! Vanguard, Weiss Schwarz
+**Supported TCGs:** Yu-Gi-Oh (OCG/JP), Z/X -Zillions of enemy X-, Cardfight!! Vanguard, Weiss Schwarz, Digimon Card Game, Union Arena
 
 **Stack:** Python 3.12, DuckDB, dbt-duckdb, Evidence.dev
 
@@ -48,6 +48,10 @@ python main.py crawl vanguard-official         # all Vanguard expansions
 python main.py crawl vanguard-official --set DZ-BT13
 python main.py crawl weiss-official            # all Weiss Schwarz expansions
 python main.py crawl weiss-official --set 29   # single expansion by numeric ID
+python main.py crawl digimon-official          # all Digimon sets
+python main.py crawl digimon-official --set 503036  # single set by numeric category ID
+python main.py crawl unionarena-official       # all Union Arena series
+python main.py crawl unionarena-official --set 570101  # single series by numeric ID
 
 # Shop prices
 python main.py crawl yuyutei-zx                # YuYuTei Z/X listings
@@ -120,6 +124,8 @@ crawlers/
     yugioh.py        # Yu-Gi-Oh OCG crawler (db.yugioh-card.com)
     vanguard.py      # Cardfight!! Vanguard crawler (cf-vanguard.com)
     weiss.py         # Weiss Schwarz crawler (ws-tcg.com)
+    digimon.py       # Digimon Card Game crawler (digimoncard.com)
+    unionarena.py    # Union Arena TCG crawler (unionarena-tcg.com)
   shops/
     base.py          # ShopListing dataclass + ShopCrawler ABC
     yuyutei.py       # YuYuTei shop crawler

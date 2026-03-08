@@ -3,3 +3,5 @@ yugioh,Yu-Gi-Oh!,global,https://www.db.yugioh-card.com,unique_per_rarity
 zx,Z/X -Zillions of enemy X-,japan,https://www.zxtcg.com,shared_official
 vanguard,Cardfight!! Vanguard,japan,https://cf-vanguard.com,unique_per_rarity
 weiss,Weiss Schwarz,japan,https://ws-tcg.com,unique_per_rarity
+digimon,Digimon Card Game,japan,https://digimoncard.com,shared_official
+unionarena,Union Arena TCG,japan,https://www.unionarena-tcg.com,unique_per_rarity
