@@ -7,8 +7,20 @@ API endpoints
 
 Known game_id / game_code pairs
 ---------------------------------
-  151 / zx  → Z/X -Zillions of enemy X-
-  (add more as needed; code comes from game.code in the API response)
+  game_id / game_code / our tcg
+    9   / yugioh  → Yu-Gi-Oh
+  126   / ws      → Weiss Schwarz
+  144   / vg      → Cardfight!! Vanguard
+  151   / zx      → Z/X -Zillions of enemy X-
+  161   / digimon → Digimon Card Game
+  180   / union   → UNION ARENA
+
+Code normalisation
+------------------
+  Some games prefix/suffix the cardset code with Japanese text in the API:
+    "★NEW★LOCR"           → "LOCR"   (YGO new-release marker)
+    "UA04ユニオンアリーナ"  → "UA04"  (UA title appended)
+  _clean_code() strips leading/trailing non-ASCII runs to get the pure code.
 
 Response structure (products endpoint)
 ----------------------------------------
@@ -65,6 +77,10 @@ HEADERS = {
 
 # Card number: leading part of comment before any whitespace
 _CARD_NUMBER_RE = re.compile(r"^\S+")
+
+# Strips leading/trailing non-ASCII runs from API cardset codes.
+# "★NEW★LOCR" → "LOCR",  "UA04ユニオンアリーナ" → "UA04"
+_CODE_ASCII_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-./]*")
 
 
 def _init_bigweb_schema(conn) -> None:
@@ -125,13 +141,34 @@ class BigwebShopCrawler(ShopCrawler):
             f"{BIGWEB_API_BASE}/cardsets",
             params={"game_id": self.game_id},
         )
-        # Filter out separator rows (empty code) and special non-set entries
-        self._cardsets = [
-            s for s in data.get("cardsets", [])
-            if s.get("code") and not self._is_irrelevant_cardset(s)
-        ]
+        # Filter out separator rows (empty code) and special non-set entries;
+        # normalise decorated codes like "★NEW★LOCR" → "LOCR".
+        cleaned = []
+        for s in data.get("cardsets", []):
+            raw_code = s.get("code", "")
+            if not raw_code or self._is_irrelevant_cardset(s):
+                continue
+            cleaned.append({**s, "code": self._clean_code(raw_code)})
+        self._cardsets = cleaned
         logger.info("Found %d cardsets", len(self._cardsets))
         return self._cardsets
+
+    @staticmethod
+    def _clean_code(code: str) -> str:
+        """Strip non-ASCII decorations and return the meaningful code token.
+
+        Bigweb sometimes wraps cardset codes with Japanese text:
+          "★NEW★LOCR"          → "LOCR"   (prefix marker before the real code)
+          "UA04ユニオンアリーナ" → "UA04"  (title appended after the real code)
+        Pure codes like "B01", "DZ-SS11" pass through unchanged.
+
+        Strategy: collect all ASCII runs; the longest one is the real code.
+        Ties are broken by taking the last run (handles "★NEW★LOCR" correctly).
+        """
+        runs = _CODE_ASCII_RE.findall(code)
+        if not runs:
+            return code
+        return max(runs, key=len)  # longest run wins; ties keep last via stable max
 
     @staticmethod
     def _is_irrelevant_cardset(cardset: dict) -> bool:

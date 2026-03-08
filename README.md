@@ -53,10 +53,24 @@ python main.py crawl digimon-official --set 503036  # single set by numeric cate
 python main.py crawl unionarena-official       # all Union Arena series
 python main.py crawl unionarena-official --set 570101  # single series by numeric ID
 
-# Shop prices
+# Shop prices — YuYuTei
 python main.py crawl yuyutei-zx                # YuYuTei Z/X listings
-python main.py crawl bigweb-zx                 # Bigweb Z/X listings
-python main.py crawl bigweb-zx --set B01
+python main.py crawl yuyutei-ygo               # YuYuTei Yu-Gi-Oh listings
+
+# Shop prices — Bigweb (API-based)
+python main.py crawl bigweb-zx                 # Z/X
+python main.py crawl bigweb-yugioh             # Yu-Gi-Oh
+python main.py crawl bigweb-vanguard           # Cardfight!! Vanguard
+python main.py crawl bigweb-weiss              # Weiss Schwarz
+python main.py crawl bigweb-digimon            # Digimon Card Game
+python main.py crawl bigweb-unionarena         # Union Arena
+python main.py crawl bigweb-zx --set B01       # single set by set code
+
+# Shop prices — Card Rush (HTML scraper)
+python main.py crawl cardrush-ygo              # cardrush.jp Yu-Gi-Oh
+python main.py crawl cardrush-vanguard         # cardrush-vanguard.jp
+python main.py crawl cardrush-digimon          # cardrush-digimon.jp
+python main.py crawl cardrush-digimon --set 189  # single product-group by numeric ID
 
 # Options
 python main.py crawl <target> --delay 2.0      # seconds between requests (default: 1.0)
@@ -70,11 +84,20 @@ Raw data is stored in `data/raw.duckdb`. Each crawler skips sets that have alrea
 DuckDB allows only one writer at a time. To run multiple official crawlers simultaneously, write each to a separate file then merge:
 
 ```bash
-# Step 1 — launch each crawler with its own DB file (run in separate terminals or with & on Linux/macOS)
-python main.py crawl zx-official      --db data/raw_zx.duckdb
-python main.py crawl yugioh-official  --db data/raw_yugioh.duckdb
-python main.py crawl vanguard-official --db data/raw_vanguard.duckdb
-python main.py crawl weiss-official   --db data/raw_weiss.duckdb
+# Step 1 — launch each crawler with its own DB file (parallel terminals / background jobs)
+python main.py crawl zx-official        --db data/raw_zx.duckdb
+python main.py crawl yugioh-official    --db data/raw_yugioh.duckdb
+python main.py crawl vanguard-official  --db data/raw_vanguard.duckdb
+python main.py crawl weiss-official     --db data/raw_weiss.duckdb
+python main.py crawl digimon-official   --db data/raw_digimon.duckdb
+python main.py crawl unionarena-official --db data/raw_unionarena.duckdb
+python main.py crawl bigweb-yugioh      --db data/raw_bigweb_yugioh.duckdb
+python main.py crawl bigweb-vanguard    --db data/raw_bigweb_vanguard.duckdb
+python main.py crawl bigweb-digimon     --db data/raw_bigweb_digimon.duckdb
+python main.py crawl bigweb-unionarena  --db data/raw_bigweb_unionarena.duckdb
+python main.py crawl cardrush-ygo       --db data/raw_cardrush_ygo.duckdb
+python main.py crawl cardrush-vanguard  --db data/raw_cardrush_vanguard.duckdb
+python main.py crawl cardrush-digimon   --db data/raw_cardrush_digimon.duckdb
 
 # Step 2 — merge all raw_*.duckdb files into data/raw.duckdb
 python main.py merge
@@ -128,8 +151,9 @@ crawlers/
     unionarena.py    # Union Arena TCG crawler (unionarena-tcg.com)
   shops/
     base.py          # ShopListing dataclass + ShopCrawler ABC
-    yuyutei.py       # YuYuTei shop crawler
-    bigweb.py        # Bigweb shop crawler
+    yuyutei.py       # YuYuTei (yuyu-tei.jp) — Z/X, Yu-Gi-Oh
+    bigweb.py        # Bigweb (bigweb.co.jp) — Z/X, Yu-Gi-Oh, Vanguard, Weiss, Digimon, UA
+    cardrush.py      # Card Rush family — cardrush.jp / cardrush-vanguard.jp / cardrush-digimon.jp
   storage.py         # DuckDB write helpers
 
 dbt/
