@@ -9,7 +9,7 @@ A card price tracking and visualization system for TCG cards. Three major compon
 2. **DBT** — transform raw data into normalized, analytics-ready models
 3. **Evidence** — display price statistics as a dashboard
 
-**Supported TCGs:** Yu-Gi-Oh, Z/X -Zillions of enemy X-
+**Supported TCGs:** Yu-Gi-Oh, Z/X -Zillions of enemy X-, Cardfight!! Vanguard, Weiss Schwarz, Digimon Card Game, Union Arena
 **Stack:** Python 3.12, DuckDB, dbt-duckdb, Evidence.dev
 
 ## Setup
@@ -86,20 +86,46 @@ The official card list is always the source of truth for canonical rarity names.
 ## Running Crawlers
 
 ```bash
-# Full crawl of all Z/X sets (skips already-crawled sets)
+# Official card lists
 python main.py crawl zx-official
+python main.py crawl yugioh-official
+python main.py crawl vanguard-official
+python main.py crawl weiss-official
+python main.py crawl digimon-official
+python main.py crawl unionarena-official
 
-# Single set (useful for testing)
-python main.py crawl zx-official --set B01
+# Shop prices — YuYuTei
+python main.py crawl yuyutei-zx
+python main.py crawl yuyutei-ygo
 
-# With debug logging
-python main.py crawl zx-official --set B01 --debug
+# Shop prices — Bigweb (game_id/game_code in bigweb.py docstring)
+python main.py crawl bigweb-zx
+python main.py crawl bigweb-yugioh
+python main.py crawl bigweb-vanguard
+python main.py crawl bigweb-weiss
+python main.py crawl bigweb-digimon
+python main.py crawl bigweb-unionarena
 
-# Adjust request delay (seconds between HTTP requests)
-python main.py crawl zx-official --delay 2.0
+# Shop prices — Card Rush
+python main.py crawl cardrush-ygo       # cardrush.jp
+python main.py crawl cardrush-vanguard  # cardrush-vanguard.jp
+python main.py crawl cardrush-digimon   # cardrush-digimon.jp
+
+# Common options
+python main.py crawl <target> --set <code>   # single set/product-group (testing)
+python main.py crawl <target> --delay 2.0    # seconds between requests (default: 1.0)
+python main.py crawl <target> --debug        # enable DEBUG logging
+python main.py crawl <target> --db data/raw_foo.duckdb  # write to separate file
 ```
 
-Raw data lands in `data/raw.duckdb`. The full Z/X crawl covers ~300 sets; at 1.5s delay it takes several hours.
+Raw data lands in `data/raw.duckdb`. To run crawlers in parallel without write conflicts, use `--db` to write separate files then merge:
+
+```bash
+python main.py crawl bigweb-yugioh --db data/raw_bigweb_yugioh.duckdb
+python main.py crawl cardrush-ygo  --db data/raw_cardrush_ygo.duckdb
+# ... other crawlers in parallel ...
+python main.py merge   # consolidates all raw_*.duckdb into data/raw.duckdb
+```
 
 ### Adding a New Crawler
 
