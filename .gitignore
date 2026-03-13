@@ -6,8 +6,8 @@ __pycache__/
 *.pyd
 
 # Data (large binary files - run dbt to regenerate)
-data/raw.duckdb
-data/raw.duckdb.wal
+data/*.duckdb
+data/*.duckdb.wal
 data/*.log
 
 # dbt

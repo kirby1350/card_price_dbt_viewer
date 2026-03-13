@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Card Price Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+
+    .card-img {
+      aspect-ratio: 7 / 10;
+      object-fit: contain;
+      background: #1e293b;
+    }
+    .price-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .card-grid-item {
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .card-grid-item:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.4);
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen" x-data="app()" x-init="init()" x-cloak>
+
+  <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-50 bg-slate-900 border-b border-slate-700 shadow-lg">
+    <div class="max-w-screen-2xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+
+      <!-- Title -->
+      <span class="text-lg font-bold text-indigo-400 tracking-wide mr-2 shrink-0">
+        🃏 Card Price Viewer
+      </span>
+
+      <!-- TCG selector -->
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-400 shrink-0">ゲーム</label>
+        <select
+          class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-40"
+          x-model="selectedTcg"
+          @change="onTcgChange()">
+          <option value="">-- 選択してください --</option>
+          <template x-for="t in tcgs" :key="t.tcg">
+            <option :value="t.tcg" x-text="t.display_name"></option>
+          </template>
+        </select>
+      </div>
+
+      <!-- Set selector -->
+      <div class="flex items-center gap-2" x-show="sets.length > 0">
+        <label class="text-xs text-slate-400 shrink-0">シリーズ</label>
+        <select
+          class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-52"
+          x-model="selectedSet"
+          @change="onSetChange()">
+          <option value="">-- 選択してください --</option>
+          <template x-for="s in sets" :key="s.set_code">
+            <option :value="s.set_code"
+              x-text="`[${s.set_code}] ${s.set_name} (${s.card_count}枚)`">
+            </option>
+          </template>
+        </select>
+      </div>
+
+      <!-- Search within set -->
+      <div class="flex items-center gap-2 flex-1 min-w-32" x-show="cards.length > 0">
+        <input
+          type="search"
+          placeholder="カード名・番号で絞り込み…"
+          class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          x-model="filterText"/>
+      </div>
+
+      <!-- Spacer -->
+      <div class="flex-1"></div>
+
+      <!-- Last updated -->
+      <div class="text-xs text-slate-400 shrink-0" x-show="lastUpdated">
+        最終更新:
+        <span class="text-slate-300 font-medium" x-text="formatDate(lastUpdated)"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Loading spinner ──────────────────────────────────────────────────── -->
+  <div class="flex justify-center items-center py-24" x-show="loading">
+    <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+    <span class="ml-3 text-slate-400">読み込み中…</span>
+  </div>
+
+  <!-- ── Empty / welcome state ────────────────────────────────────────────── -->
+  <div class="flex flex-col items-center justify-center py-32 text-slate-500"
+       x-show="!loading && cards.length === 0 && !selectedSet">
+    <svg class="w-16 h-16 mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+    </svg>
+    <p class="text-lg">ゲームとシリーズを選択してください</p>
+  </div>
+
+  <!-- ── Card grid ─────────────────────────────────────────────────────────── -->
+  <main class="max-w-screen-2xl mx-auto px-4 py-6" x-show="!loading && cards.length > 0">
+
+    <!-- Stats bar -->
+    <div class="flex items-center gap-4 mb-4 text-sm text-slate-400">
+      <span x-text="`${filteredCards.length} 枚 / ${cards.length} 枚`"></span>
+      <span x-show="filteredCards.length !== cards.length" class="text-indigo-400">
+        (フィルター中)
+      </span>
+    </div>
+
+    <div class="grid gap-3"
+         style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))">
+
+      <template x-for="card in filteredCards" :key="card.card_number + card.rarity_code">
+        <div class="card-grid-item bg-slate-800 rounded-xl overflow-hidden border border-slate-700 flex flex-col">
+
+          <!-- Card image -->
+          <div class="relative bg-slate-900">
+            <img
+              class="card-img w-full"
+              :src="card.image_url || ''"
+              :alt="card.card_name"
+              loading="lazy"
+              @error="$event.target.style.display='none'; $event.target.nextElementSibling.style.display='flex'"
+            />
+            <!-- Fallback when no image -->
+            <div class="card-img w-full hidden flex-col items-center justify-center text-slate-600 text-xs p-2 text-center">
+              <svg class="w-8 h-8 mb-1 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/>
+              </svg>
+              No Image
+            </div>
+            <!-- Rarity badge -->
+            <span class="absolute top-1 right-1 text-xs font-bold px-1.5 py-0.5 rounded-md"
+                  :class="rarityClass(card.rarity_code)"
+                  x-text="card.rarity_code">
+            </span>
+          </div>
+
+          <!-- Card info -->
+          <div class="p-2 flex flex-col gap-1.5 flex-1">
+            <div>
+              <p class="text-xs text-slate-500 leading-none" x-text="card.card_number"></p>
+              <p class="text-sm font-semibold leading-tight mt-0.5 line-clamp-2"
+                 x-text="card.card_name"></p>
+            </div>
+
+            <!-- Prices -->
+            <div class="flex flex-col gap-1 mt-auto pt-1 border-t border-slate-700">
+              <template x-if="card.prices && card.prices.length > 0">
+                <div class="flex flex-col gap-1">
+                  <template x-for="(p, i) in card.prices" :key="p.shop">
+                    <a :href="p.url" target="_blank" rel="noopener"
+                       class="flex items-center justify-between hover:opacity-80 transition-opacity group">
+                      <span class="price-chip text-white"
+                            :style="`background-color: ${p.color}`"
+                            x-text="p.display_name">
+                      </span>
+                      <span class="text-right">
+                        <span class="text-sm font-bold text-white"
+                              x-text="`¥${p.price.toLocaleString()}`">
+                        </span>
+                        <span class="text-xs text-slate-400 ml-1"
+                              x-show="p.quantity > 0"
+                              x-text="`(${p.quantity})`">
+                        </span>
+                        <span class="text-xs text-red-400 ml-1"
+                              x-show="p.quantity === 0">
+                          売切
+                        </span>
+                      </span>
+                    </a>
+                  </template>
+                  <!-- Best price highlight -->
+                  <div class="text-right mt-0.5" x-show="card.prices.length > 1">
+                    <span class="text-xs text-amber-400 font-semibold"
+                          x-text="`最安 ¥${Math.min(...card.prices.map(p=>p.price)).toLocaleString()}`">
+                    </span>
+                  </div>
+                </div>
+              </template>
+              <template x-if="!card.prices || card.prices.length === 0">
+                <p class="text-xs text-slate-600 text-center py-1">価格情報なし</p>
+              </template>
+            </div>
+          </div>
+
+        </div>
+      </template>
+    </div>
+  </main>
+
+  <script>
+    function app() {
+      return {
+        tcgs:        [],
+        sets:        [],
+        cards:       [],
+        selectedTcg: '',
+        selectedSet: '',
+        filterText:  '',
+        loading:     false,
+        lastUpdated: null,
+
+        async init() {
+          const res = await fetch('/api/tcgs');
+          this.tcgs = await res.json();
+        },
+
+        async onTcgChange() {
+          this.sets = [];
+          this.cards = [];
+          this.selectedSet = '';
+          this.lastUpdated = null;
+          this.filterText = '';
+          if (!this.selectedTcg) return;
+          this.loading = true;
+          try {
+            const res = await fetch(`/api/tcgs/${this.selectedTcg}/sets`);
+            this.sets = await res.json();
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async onSetChange() {
+          this.cards = [];
+          this.lastUpdated = null;
+          this.filterText = '';
+          if (!this.selectedSet) return;
+          this.loading = true;
+          try {
+            const res = await fetch(`/api/tcgs/${this.selectedTcg}/sets/${this.selectedSet}`);
+            const data = await res.json();
+            this.cards = data.cards;
+            this.lastUpdated = data.last_updated;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        get filteredCards() {
+          if (!this.filterText.trim()) return this.cards;
+          const q = this.filterText.trim().toLowerCase();
+          return this.cards.filter(c =>
+            c.card_name?.toLowerCase().includes(q) ||
+            c.card_number?.toLowerCase().includes(q) ||
+            c.rarity_code?.toLowerCase().includes(q)
+          );
+        },
+
+        formatDate(iso) {
+          if (!iso) return '';
+          const d = new Date(iso);
+          return d.toLocaleString('ja-JP', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+          });
+        },
+
+        rarityClass(code) {
+          if (!code) return 'bg-slate-600 text-white';
+          const c = code.toUpperCase();
+          if (c.includes('SR') && c.includes('★★★')) return 'bg-red-500 text-white';
+          if (c.includes('SR') && c.includes('★★'))  return 'bg-orange-500 text-white';
+          if (c.includes('SR') && c.includes('★'))   return 'bg-amber-500 text-white';
+          if (c.startsWith('SR'))  return 'bg-yellow-500 text-black';
+          if (c.startsWith('RRR')) return 'bg-purple-600 text-white';
+          if (c.startsWith('RR'))  return 'bg-purple-500 text-white';
+          if (c === 'R' || c.startsWith('RH')) return 'bg-blue-500 text-white';
+          if (c === 'C' || c.startsWith('CH')) return 'bg-slate-500 text-white';
+          if (c === 'U')           return 'bg-teal-600 text-white';
+          if (c.includes('SEC'))   return 'bg-rose-600 text-white';
+          if (c.includes('UR'))    return 'bg-cyan-500 text-white';
+          return 'bg-slate-600 text-white';
+        },
+      };
+    }
+  </script>
+</body>
+</html>
