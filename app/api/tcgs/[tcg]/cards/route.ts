@@ -1,0 +1,156 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
+
+interface CardPriceRow {
+  card_edition_id: string
+  set_code: string
+  set_name: string
+  card_number: string
+  card_name: string
+  rarity_code: string
+  rarity_name: string
+  image_url: string | null
+  shop: string
+  price: number | null
+  quantity: number | null
+  url: string | null
+  condition: string | null
+  crawled_at: string | null
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ tcg: string }> }
+) {
+  const { tcg } = await params
+  const { searchParams } = new URL(request.url)
+  const setCode = searchParams.get('set_code')
+
+  if (!setCode) {
+    return NextResponse.json({ error: '缺少 set_code 参数' }, { status: 400 })
+  }
+
+  try {
+    // Join official cards with latest shop prices
+    const sql = `
+      SELECT
+        e.card_edition_id,
+        e.set_code,
+        e.set_name,
+        e.card_number,
+        e.card_name,
+        e.rarity_code,
+        e.rarity_name,
+        e.image_url,
+        p.shop,
+        p.price,
+        p.quantity,
+        p.url,
+        p.condition,
+        p.crawled_at
+      FROM (
+        SELECT DISTINCT ON (tcg, card_number, rarity_code)
+          md5(tcg || card_number || COALESCE(rarity_code, '')) AS card_edition_id,
+          tcg,
+          set_code,
+          set_name,
+          card_number,
+          card_name,
+          rarity_code,
+          rarity_name,
+          numbering_scheme,
+          (extra::json->>'image_url')::text AS image_url,
+          crawled_at
+        FROM raw_official_cards
+        WHERE tcg = $1 AND set_code = $2
+        ORDER BY tcg, card_number, rarity_code, crawled_at DESC
+      ) e
+      LEFT JOIN (
+        SELECT DISTINCT ON (tcg, card_number_raw, shop, condition)
+          tcg,
+          card_number_raw,
+          shop,
+          price,
+          quantity,
+          url,
+          condition,
+          crawled_at
+        FROM raw_shop_listings
+        WHERE tcg = $1
+        ORDER BY tcg, card_number_raw, shop, condition, crawled_at DESC
+      ) p ON p.tcg = e.tcg AND p.card_number_raw = e.card_number
+      ORDER BY e.card_number, e.rarity_code, p.shop
+    `
+
+    const rows = await query<CardPriceRow>(sql, [tcg, setCode])
+
+    // Group by card edition: one card → multiple shop listings
+    const cardMap = new Map<string, {
+      card_edition_id: string
+      set_code: string
+      set_name: string
+      card_number: string
+      card_name: string
+      rarity_code: string
+      rarity_name: string
+      image_url: string | null
+      prices: Array<{
+        shop: string
+        price: number | null
+        quantity: number | null
+        url: string | null
+        condition: string | null
+        crawled_at: string | null
+      }>
+    }>()
+
+    for (const row of rows) {
+      const key = row.card_edition_id
+      if (!cardMap.has(key)) {
+        cardMap.set(key, {
+          card_edition_id: row.card_edition_id,
+          set_code: row.set_code,
+          set_name: row.set_name,
+          card_number: row.card_number,
+          card_name: row.card_name,
+          rarity_code: row.rarity_code,
+          rarity_name: row.rarity_name,
+          image_url: row.image_url,
+          prices: [],
+        })
+      }
+      if (row.shop) {
+        cardMap.get(key)!.prices.push({
+          shop: row.shop,
+          price: row.price,
+          quantity: row.quantity,
+          url: row.url,
+          condition: row.condition,
+          crawled_at: row.crawled_at,
+        })
+      }
+    }
+
+    // Get the last updated time for this set
+    const lastUpdatedResult = await query<{ last_updated: string }>(
+      `SELECT MAX(p.crawled_at)::text AS last_updated
+       FROM raw_shop_listings p
+       WHERE p.tcg = $1
+       AND p.card_number_raw IN (
+         SELECT DISTINCT card_number FROM raw_official_cards WHERE tcg = $1 AND set_code = $2
+       )`,
+      [tcg, setCode]
+    )
+
+    return NextResponse.json({
+      cards: Array.from(cardMap.values()),
+      last_updated: lastUpdatedResult[0]?.last_updated ?? null,
+    })
+  } catch (error) {
+    console.error('[API] Failed to fetch cards:', error)
+    return NextResponse.json(
+      { error: '获取卡牌数据失败', detail: String(error) },
+      { status: 500 }
+    )
+  }
+}

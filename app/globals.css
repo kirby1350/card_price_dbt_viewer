@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark game-style theme */
+    --background: 220 18% 9%;
+    --foreground: 210 20% 92%;
+
+    --card: 220 16% 13%;
+    --card-foreground: 210 20% 92%;
+
+    --muted: 220 14% 18%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 185 70% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --border: 220 14% 20%;
+
+    --primary: 185 70% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --price-low: 145 60% 42%;
+    --price-mid: 45 90% 52%;
+    --price-high: 0 72% 55%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
