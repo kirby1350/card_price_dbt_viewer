@@ -164,9 +164,21 @@ def get_set_cards(tcg: str, set_code: str) -> dict[str, Any]:
                 AND l.card_number_norm = upper(trim(
                         regexp_replace(o.card_number, '_p[0-9]+$', '', 'gi')
                     ))
-                AND l.rarity_norm = upper(trim(
-                        regexp_replace(o.rarity_code, '_p[0-9]+$', '', 'gi')
-                    ))
+                AND (
+                    -- Empty rarity (e.g. hobbystation): match base card only
+                    (l.rarity_norm = '' AND o.rarity_code NOT SIMILAR TO '%%[_]p[0-9]+')
+                    -- Star-only rarity (★/★★/★★★): match parallel with same star count
+                    OR (l.rarity_norm SIMILAR TO '(★)+' AND
+                        upper(trim(regexp_replace(o.rarity_code, '_p[0-9]+$', '', 'gi')))
+                            LIKE '%%' || l.rarity_norm
+                        AND NOT upper(trim(regexp_replace(o.rarity_code, '_p[0-9]+$', '', 'gi')))
+                            LIKE '%%' || l.rarity_norm || '★%%')
+                    -- Full rarity (SR, SR★, etc.): exact match
+                    OR (l.rarity_norm <> '' AND l.rarity_norm NOT SIMILAR TO '(★)+'
+                        AND l.rarity_norm = upper(trim(
+                            regexp_replace(o.rarity_code, '_p[0-9]+$', '', 'gi')
+                        )))
+                )
             WHERE o.tcg = %s AND upper(trim(o.set_code)) = upper(trim(%s))
             GROUP BY
                 o.card_number, o.card_name, o.rarity_code,
