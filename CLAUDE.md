@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A card price tracking and visualization system for TCG cards. Three major components:
+A card price tracking and visualization system for TCG cards. Four major components:
 1. **Crawlers** — scrape official card lists and shop prices
 2. **DBT** — transform raw data into normalized, analytics-ready models
-3. **Evidence** — display price statistics as a dashboard
+3. **Evidence** — display price statistics as a dashboard (DuckDB-based)
+4. **Web** — FastAPI + Alpine.js card price viewer (PostgreSQL-based)
 
 **Supported TCGs:** Yu-Gi-Oh, Z/X -Zillions of enemy X-, Cardfight!! Vanguard, Weiss Schwarz, Digimon Card Game, Union Arena
-**Stack:** Python 3.12, DuckDB, dbt-duckdb, Evidence.dev
+**Stack:** Python 3.12, DuckDB, dbt-duckdb, Evidence.dev, FastAPI, PostgreSQL
 
 ## Setup
 
@@ -34,8 +35,15 @@ Run Evidence (from `evidence/` directory):
 ```bash
 cd evidence
 npm install
+npm run sources   # generate source data from DuckDB
 npm run dev       # development server
 npm run build     # production build
+```
+
+Run Web viewer (requires `DATABASE_URL` in `.env`):
+```bash
+pip install uvicorn fastapi psycopg2-binary
+uvicorn web.api:app --reload --port 8000
 ```
 
 ## Architecture
@@ -78,10 +86,14 @@ The official card list is always the source of truth for canonical rarity names.
 |------|---------|
 | `crawlers/official/base.py` | `OfficialCard` dataclass + `OfficialCrawler` ABC |
 | `crawlers/shops/base.py` | `ShopListing` dataclass + `ShopCrawler` ABC |
+| `crawlers/shops/mastersquare.py` | Masters Square crawler (Union Arena) |
+| `crawlers/shops/hobbystation.py` | Hobby Station crawler (Union Arena) |
 | `crawlers/storage.py` | DuckDB write helpers; DB at `data/raw.duckdb` |
 | `dbt/models/intermediate/int_card_editions.sql` | Core identity model |
 | `dbt/models/intermediate/int_shop_prices_matched.sql` | Rarity matching logic |
 | `dbt/seeds/rarity_alias_map.csv` | Maps shop rarity strings → canonical per TCG |
+| `web/api.py` | FastAPI backend querying PostgreSQL |
+| `web/static/` | Alpine.js frontend for card price viewer |
 
 ## Running Crawlers
 
@@ -137,7 +149,18 @@ python main.py merge   # consolidates all raw_*.duckdb into data/raw.duckdb
 
 **Official crawler:** subclass `OfficialCrawler` in `crawlers/official/`, implement `crawl_sets()` and `crawl_cards()`. Set `numbering_scheme` correctly on each `OfficialCard`.
 
-**Shop crawler:** subclass `ShopCrawler` in `crawlers/shops/`, implement `crawl_set()` and `search_card()`. Populate `rarity_raw` with the shop's raw rarity string (mapping happens in dbt). Add new rarity aliases to `dbt/seeds/rarity_alias_map.csv`.
+**Shop crawler:** subclass `ShopCrawler` in `crawlers/shops/`, implement `crawl_set()` and `search_card()`. Populate `rarity_raw` with the shop's raw rarity string (mapping happens in dbt). Add new rarity aliases to `dbt/seeds/rarity_alias_map.csv`. Register the new target in `main.py` choices and add an elif branch. Add display name and color to `web/api.py` `SHOP_DISPLAY` / `SHOP_COLOR`.
+
+**Note on `rarity_raw`:** Shops should provide the full rarity string (e.g. `SR`, `SR★`) when possible. The web API query supports three formats: full rarity (exact match), star-only rarity like `★`/`★★`/`★★★` (suffix match against official rarity), and empty rarity (matches base non-parallel card only). Shops that cannot determine base rarity (e.g. hobbystation) can use empty or star-only rarity_raw and still match correctly for `unique_per_rarity` TCGs.
+
+### Adding a New Shop
+
+1. Create `crawlers/shops/{shop}.py` subclassing `ShopCrawler`
+2. Add target choice and elif branch in `main.py`
+3. Add shop display name to `web/api.py` `SHOP_DISPLAY`
+4. Add shop color to `web/api.py` `SHOP_COLOR`
+5. Add rarity aliases to `dbt/seeds/rarity_alias_map.csv` if needed
+6. Crawl into PostgreSQL with `python main.py crawl <target>` (uses `DATABASE_URL` from `.env`)
 
 ### Adding a New TCG
 
