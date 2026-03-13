@@ -1,20 +1,31 @@
 {
   "name": "card-price-viewer",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "evidence dev",
-    "build": "evidence build",
-    "preview": "evidence preview",
-    "sources": "evidence sources"
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "@evidence-dev/evidence": "^40.0.0",
-    "@evidence-dev/core-components": "^5.0.0",
-    "@evidence-dev/duckdb": "^2.0.0"
+    "next": "^15.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "pg": "^8.12.0",
+    "swr": "^2.2.5",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.2",
+    "lucide-react": "^0.460.0"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.0"
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.6.0",
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.0",
+    "autoprefixer": "^10.4.0"
   }
 }
