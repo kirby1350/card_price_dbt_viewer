@@ -245,12 +245,19 @@ class BigwebShopCrawler(ShopCrawler):
     # Full crawl orchestration
     # ------------------------------------------------------------------
 
-    def run_full_crawl(self, db_path=None) -> None:
-        """Crawl all sets and persist listings to DuckDB.
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
+        """Crawl all sets and persist listings to the DB.
 
         Skips sets whose listings were already crawled today.
+
+        Args:
+            db_path: DuckDB file path (default: data/raw.duckdb).
+            conn:    Pre-opened connection (DuckDB or PgAdapter). When provided,
+                     db_path is ignored and the caller is responsible for closing.
         """
-        conn = get_connection(db_path or DB_PATH)
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         _init_bigweb_schema(conn)
 
@@ -317,5 +324,6 @@ class BigwebShopCrawler(ShopCrawler):
             )
             logger.info("   saved %d listings for %s", count, set_code)
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("Bigweb full crawl complete (game_id=%s)", self.game_id)

@@ -36,6 +36,7 @@ editions as (
             card_number
         ) as card_base_id,
 
+        image_url,
         crawled_at
     from official
 )

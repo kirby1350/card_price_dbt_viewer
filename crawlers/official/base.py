@@ -23,6 +23,7 @@ class OfficialCard:
     #   "shared_no_official"  — same number across rarities, no official rarity name (case 3)
     numbering_scheme: str
     card_base_id: str | None  # for case 2: groups cards that are logically the same
+    image_url: str            # card image URL (empty string if unavailable)
     extra: dict               # TCG-specific fields (e.g. card type, attribute)
 
 

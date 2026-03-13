@@ -25,6 +25,9 @@ evidence/logs/
 # Evidence source symlinks (use relative path in connection.yaml instead)
 evidence/sources/*/raw.duckdb
 
+# Environment / secrets
+.env
+
 # IDE
 .idea/
 

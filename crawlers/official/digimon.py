@@ -306,6 +306,7 @@ class DigimonOfficialCrawler(OfficialCrawler):
                 rarity_name=card["rarity_name"],
                 numbering_scheme="shared_official",
                 card_base_id=card_number,
+                image_url=card["image_url"],
                 extra={
                     "category_id": dset.category_id,
                     "card_type": card["card_type"],
@@ -324,8 +325,10 @@ class DigimonOfficialCrawler(OfficialCrawler):
     # Full crawl
     # ------------------------------------------------------------------
 
-    def run_full_crawl(self, db_path=None) -> None:
-        conn = get_connection(db_path or DB_PATH)
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         _init_digimon_schema(conn)
 
@@ -365,6 +368,7 @@ class DigimonOfficialCrawler(OfficialCrawler):
                         "rarity_name": card.rarity_name,
                         "numbering_scheme": card.numbering_scheme,
                         "card_base_id": card.card_base_id,
+                        "image_url": card.image_url,
                         "extra": json.dumps(card.extra, ensure_ascii=False),
                     })
                     count += 1
@@ -386,5 +390,6 @@ class DigimonOfficialCrawler(OfficialCrawler):
             )
             logger.info("  saved %d cards for set %d", count, dset.category_id)
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("Digimon full crawl complete")

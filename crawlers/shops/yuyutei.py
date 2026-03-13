@@ -109,9 +109,9 @@ class YuyuteiShopCrawler(ShopCrawler):
     # HTTP
     # ------------------------------------------------------------------
 
-    def _get(self, url: str) -> BeautifulSoup:
+    def _get(self, url: str, params: dict | None = None) -> BeautifulSoup:
         import time
-        resp = self.session.get(url, timeout=30)
+        resp = self.session.get(url, params=params, timeout=30)
         resp.raise_for_status()
         resp.encoding = "utf-8"
         time.sleep(self.delay)
@@ -284,16 +284,26 @@ class YuyuteiShopCrawler(ShopCrawler):
     # ShopCrawler interface
     # ------------------------------------------------------------------
 
+    # Game codes that use a search URL instead of a per-set URL.
+    # UA uses /sell/ua/s/search?search_word={SET_CODE} (set pages load cards via JS only).
+    _SEARCH_WORD_GAMES: frozenset[str] = frozenset({"ua"})
+
     def crawl_set(self, set_code: str) -> Iterator[ShopListing]:
         """Crawl all listings for one set (all rarities, one page).
 
         Args:
-            set_code: uppercase set code, e.g. "B01"
+            set_code: uppercase set code, e.g. "B01" or "UA01BT"
         """
-        set_code_lower = set_code.lower()
-        url = f"{YUYUTEI_BASE}/sell/{self.game_code}/s/{set_code_lower}"
-        logger.info("Crawling set %s — %s", set_code, url)
-        soup = self._get(url)
+        if self.game_code in self._SEARCH_WORD_GAMES:
+            url = f"{YUYUTEI_BASE}/sell/{self.game_code}/s/search"
+            params = {"search_word": set_code}
+            logger.info("Crawling set %s — %s?search_word=%s", set_code, url, set_code)
+            soup = self._get(url, params=params)
+        else:
+            url = f"{YUYUTEI_BASE}/sell/{self.game_code}/s/{set_code.lower()}"
+            params = None
+            logger.info("Crawling set %s — %s", set_code, url)
+            soup = self._get(url)
         # Opportunistically populate the set list from the sidebar
         if not self._sets:
             self._sets = self._parse_sets_from_soup(soup)
@@ -314,7 +324,7 @@ class YuyuteiShopCrawler(ShopCrawler):
 
         For ZX, reads zx_sets; for other TCGs returns an empty list.
         """
-        table_map = {"zx": "zx_sets"}
+        table_map = {"zx": "zx_sets", "ua": "ua_sets"}
         table = table_map.get(self.game_code)
         if not table:
             return []
@@ -339,12 +349,19 @@ class YuyuteiShopCrawler(ShopCrawler):
         )
         return sets
 
-    def run_full_crawl(self, db_path=None) -> None:
-        """Crawl all sets and persist listings to DuckDB.
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
+        """Crawl all sets and persist listings to the DB.
 
         Skips sets whose listings were already crawled today.
+
+        Args:
+            db_path: DuckDB file path (default: data/raw.duckdb).
+            conn:    Pre-opened connection (DuckDB or PgAdapter). When provided,
+                     db_path is ignored and the caller is responsible for closing.
         """
-        conn = get_connection(db_path or DB_PATH)
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         _init_yuyutei_schema(conn)
 
@@ -415,5 +432,6 @@ class YuyuteiShopCrawler(ShopCrawler):
             )
             logger.info("   saved %d listings", count)
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("YuYuTei full crawl complete (game=%s)", self.game_code)

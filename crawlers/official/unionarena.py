@@ -79,6 +79,7 @@ from typing import Iterator
 
 import requests
 from bs4 import BeautifulSoup
+
 from tqdm import tqdm
 
 from crawlers.official.base import OfficialCard, OfficialCrawler
@@ -373,6 +374,7 @@ class UnionArenaOfficialCrawler(OfficialCrawler):
                 rarity_name=detail["rarity"],
                 numbering_scheme="unique_per_rarity",
                 card_base_id=base_no,
+                image_url=image_url,
                 extra={
                     "series_id": ua_set.series_id,
                     "title_name": ua_set.title_name,
@@ -394,8 +396,10 @@ class UnionArenaOfficialCrawler(OfficialCrawler):
     # Full crawl
     # ------------------------------------------------------------------
 
-    def run_full_crawl(self, db_path=None) -> None:
-        conn = get_connection(db_path or DB_PATH)
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         _init_unionarena_schema(conn)
 
@@ -438,6 +442,7 @@ class UnionArenaOfficialCrawler(OfficialCrawler):
                         "rarity_name": card.rarity_name,
                         "numbering_scheme": card.numbering_scheme,
                         "card_base_id": card.card_base_id,
+                        "image_url": card.image_url,
                         "extra": json.dumps(card.extra, ensure_ascii=False),
                     })
                     count += 1
@@ -459,5 +464,6 @@ class UnionArenaOfficialCrawler(OfficialCrawler):
             )
             logger.info("  saved %d cards for series %d (%s)", count, ua_set.series_id, ua_set.set_code)
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("Union Arena full crawl complete")

@@ -44,7 +44,6 @@ import time
 from dataclasses import dataclass
 from typing import Iterator
 
-import duckdb
 import requests
 from bs4 import BeautifulSoup, Tag
 
@@ -297,6 +296,7 @@ class ZXOfficialCrawler(OfficialCrawler):
             rarity_name=rarity_code,          # ZX uses the code as the canonical name
             numbering_scheme="shared_official",
             card_base_id=card_number,         # alt arts share the base card's number
+            image_url=image_url,
             extra=extra,
         )
 
@@ -346,7 +346,7 @@ class ZXOfficialCrawler(OfficialCrawler):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _update_name_groups(conn: duckdb.DuckDBPyConnection) -> int:
+    def _update_name_groups(conn) -> int:
         """Detect cards sharing the same name across different card numbers (reprints).
 
         For each such group:
@@ -387,15 +387,22 @@ class ZXOfficialCrawler(OfficialCrawler):
     # Full crawl orchestration
     # ------------------------------------------------------------------
 
-    def run_full_crawl(self, db_path=None) -> None:
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
         """
         End-to-end crawl:
           1. Parse sets and rarities from the search page.
-          2. Persist any new sets/rarities to DuckDB.
+          2. Persist any new sets/rarities to the DB.
           3. Crawl cards for each set not yet in the DB.
           4. Compute and store cross-set same-name (reprint) groups.
+
+        Args:
+            db_path: DuckDB file path (default: data/raw.duckdb).
+            conn:    Pre-opened connection (DuckDB or PgAdapter). When provided,
+                     db_path is ignored and the caller is responsible for closing.
         """
-        conn = get_connection(db_path or DB_PATH)
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         init_zx_schema(conn)
 
@@ -458,6 +465,7 @@ class ZXOfficialCrawler(OfficialCrawler):
                     "rarity_name": card.rarity_name,
                     "numbering_scheme": card.numbering_scheme,
                     "card_base_id": card.card_base_id,
+                    "image_url": card.image_url,
                     "extra": json.dumps(card.extra, ensure_ascii=False),
                 })
                 count += 1
@@ -478,5 +486,6 @@ class ZXOfficialCrawler(OfficialCrawler):
         n_groups = self._update_name_groups(conn)
         logger.info("Cross-set reprint groups found: %d", n_groups)
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("Full crawl complete")

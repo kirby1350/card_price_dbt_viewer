@@ -92,7 +92,7 @@ _CARD_NO_RE = re.compile(r"^([A-Z0-9]{2,8})-JP\d{3,4}[A-Z]?$")
 _PID_RE = re.compile(r"pid=(\d+)")
 
 
-def _init_yugioh_schema(conn) -> None:
+def _init_yugioh_schema(conn) -> None:  # conn: DuckDB or PgAdapter
     conn.execute("""
         CREATE TABLE IF NOT EXISTS yugioh_sets (
             pid          VARCHAR PRIMARY KEY,
@@ -308,6 +308,7 @@ class YugiohOfficialCrawler(OfficialCrawler):
                     rarity_name=app["rarity_name"],
                     numbering_scheme="shared_official",
                     card_base_id=cid,
+                    image_url=app.get("image_url", ""),
                     extra={
                         "pid": pid,
                         "cid": cid,
@@ -322,9 +323,17 @@ class YugiohOfficialCrawler(OfficialCrawler):
     # Full crawl
     # ------------------------------------------------------------------
 
-    def run_full_crawl(self, db_path=None) -> None:
-        """Crawl all sets and persist to DuckDB, skipping already-crawled sets."""
-        conn = get_connection(db_path or DB_PATH)
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
+        """Crawl all sets and persist to the DB, skipping already-crawled sets.
+
+        Args:
+            db_path: DuckDB file path (default: data/raw.duckdb).
+            conn:    Pre-opened connection (DuckDB or PgAdapter). When provided,
+                     db_path is ignored and the caller is responsible for closing.
+        """
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         _init_yugioh_schema(conn)
 
@@ -362,6 +371,7 @@ class YugiohOfficialCrawler(OfficialCrawler):
                         "rarity_name": card.rarity_name,
                         "numbering_scheme": card.numbering_scheme,
                         "card_base_id": card.card_base_id,
+                        "image_url": card.image_url,
                         "extra": json.dumps(card.extra, ensure_ascii=False),
                     })
                     count += 1
@@ -386,5 +396,6 @@ class YugiohOfficialCrawler(OfficialCrawler):
             logger.info("  saved %d card editions (cache size: %d unique cards)",
                         count, len(self._detail_cache))
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("YuGiOh full crawl complete")

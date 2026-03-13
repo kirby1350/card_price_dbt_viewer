@@ -328,6 +328,7 @@ class WeissOfficialCrawler(OfficialCrawler):
                 rarity_name=row["rarity"],
                 numbering_scheme="unique_per_rarity",
                 card_base_id=_card_base_id(card_number),
+                image_url=row["image_url"],
                 extra={
                     "expansion_id": exp.expansion_id,
                     "side": row["side"],
@@ -349,8 +350,10 @@ class WeissOfficialCrawler(OfficialCrawler):
     # Full crawl
     # ------------------------------------------------------------------
 
-    def run_full_crawl(self, db_path=None) -> None:
-        conn = get_connection(db_path or DB_PATH)
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         _init_weiss_schema(conn)
 
@@ -390,6 +393,7 @@ class WeissOfficialCrawler(OfficialCrawler):
                         "rarity_name": card.rarity_name,
                         "numbering_scheme": card.numbering_scheme,
                         "card_base_id": card.card_base_id,
+                        "image_url": card.image_url,
                         "extra": json.dumps(card.extra, ensure_ascii=False),
                     })
                     count += 1
@@ -411,5 +415,6 @@ class WeissOfficialCrawler(OfficialCrawler):
             )
             logger.info("  saved %d cards for expansion %d", count, exp.expansion_id)
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("Weiss Schwarz full crawl complete")

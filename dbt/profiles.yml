@@ -5,3 +5,9 @@ card_price:
       type: duckdb
       path: "{{ env_var('DBT_DUCKDB_PATH', '../data/raw.duckdb') }}"
       threads: 4
+      extensions:
+        - postgres
+      attach:
+        - path: "host=212.50.251.87 port=5432 dbname=card_price_dbt user=postgres password=teruhiko1996"
+          alias: pg
+          type: postgres

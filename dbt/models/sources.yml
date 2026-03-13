@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw
-    description: "Raw data landed by crawlers into DuckDB"
+    description: "Raw data in DuckDB (ZX, YuGiOh crawlers)"
     schema: main
     tables:
       - name: raw_official_cards
@@ -24,3 +24,14 @@ sources:
             description: "Card number as displayed by the shop (may differ from official)"
           - name: rarity_raw
             description: "Rarity string as displayed by the shop (requires mapping to canonical)"
+
+  - name: raw_pg
+    description: "Raw data in PostgreSQL (Union Arena, torecatchi crawlers)"
+    database: pg
+    schema: public
+    tables:
+      - name: raw_official_cards
+        description: "Official card list data from PostgreSQL (Union Arena)"
+
+      - name: raw_shop_listings
+        description: "Shop price listings from PostgreSQL (torecatchi)"

@@ -77,7 +77,6 @@ import time
 from dataclasses import dataclass
 from typing import Iterator
 
-import duckdb
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
@@ -373,6 +372,7 @@ class VanguardOfficialCrawler(OfficialCrawler):
                 rarity_name=rarity_code,  # Vanguard uses the code as the canonical name
                 numbering_scheme="unique_per_rarity",
                 card_base_id=card_number,  # updated in post-crawl same-name grouping
+                image_url=extra.get("image_url", ""),
                 extra=extra,
             )
 
@@ -381,7 +381,7 @@ class VanguardOfficialCrawler(OfficialCrawler):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _update_name_groups(conn: duckdb.DuckDBPyConnection) -> int:
+    def _update_name_groups(conn) -> int:
         """Detect cards sharing the same name but having different card_numbers.
 
         In Vanguard, DZ-BT13/001 (RRR) and DZ-BT13/SR01 (SR) are the same
@@ -413,14 +413,21 @@ class VanguardOfficialCrawler(OfficialCrawler):
     # Full crawl orchestration
     # ------------------------------------------------------------------
 
-    def run_full_crawl(self, db_path=None) -> None:
+    def run_full_crawl(self, db_path=None, conn=None) -> None:
         """End-to-end crawl:
         1. Parse all expansions from the site.
         2. Persist new expansions to vanguard_sets.
         3. Crawl cards for each expansion not yet in raw_official_cards.
         4. Update card_base_id for same-name groups.
+
+        Args:
+            db_path: DuckDB file path (default: data/raw.duckdb).
+            conn:    Pre-opened connection (DuckDB or PgAdapter). When provided,
+                     db_path is ignored and the caller is responsible for closing.
         """
-        conn = get_connection(db_path or DB_PATH)
+        _own_conn = conn is None
+        if _own_conn:
+            conn = get_connection(db_path or DB_PATH)
         init_schema(conn)
         init_vanguard_schema(conn)
 
@@ -470,6 +477,7 @@ class VanguardOfficialCrawler(OfficialCrawler):
                     "rarity_name": card.rarity_name,
                     "numbering_scheme": card.numbering_scheme,
                     "card_base_id": card.card_base_id,
+                    "image_url": card.image_url,
                     "extra": json.dumps(card.extra, ensure_ascii=False),
                 })
                 count += 1
@@ -489,7 +497,8 @@ class VanguardOfficialCrawler(OfficialCrawler):
         n_groups = self._update_name_groups(conn)
         logger.info("Same-name groups updated: %d", n_groups)
 
-        conn.close()
+        if _own_conn:
+            conn.close()
         logger.info("Full crawl complete")
 
 

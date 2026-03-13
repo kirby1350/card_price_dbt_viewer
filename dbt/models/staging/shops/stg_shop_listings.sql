@@ -4,6 +4,8 @@
 
 with source as (
     select * from {{ source('raw', 'raw_shop_listings') }}
+    union all
+    select * from {{ source('raw_pg', 'raw_shop_listings') }}
 ),
 
 cleaned as (

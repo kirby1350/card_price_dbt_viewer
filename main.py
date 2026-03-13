@@ -1,7 +1,33 @@
 """CLI entry point for card_price_dbt_viewer."""
 import argparse
 import logging
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env from the project root (same directory as this file).
+load_dotenv(Path(__file__).parent / ".env")
+
+
+def _open_conn(args):
+    """Return a DB connection — DuckDB or PgAdapter — based on CLI flags / .env.
+
+    Resolution order for PostgreSQL URL:
+      1. --pg-url CLI flag
+      2. DATABASE_URL environment variable (set via .env)
+    Falls back to DuckDB (--db flag or data/raw.duckdb) when neither is set.
+    """
+    pg_url = getattr(args, "pg_url", None) or os.environ.get("DATABASE_URL")
+    if pg_url:
+        import psycopg2
+        from crawlers.db import PgAdapter
+        # psycopg2 expects "postgresql://..." not "postgresql+psycopg2://..."
+        pg_url = pg_url.replace("postgresql+psycopg2://", "postgresql://", 1)
+        return PgAdapter(psycopg2.connect(pg_url))
+    from crawlers.storage import get_connection, DB_PATH
+    db_path = Path(args.db) if getattr(args, "db", None) else DB_PATH
+    return get_connection(db_path)
 
 
 def main() -> None:
@@ -12,7 +38,7 @@ def main() -> None:
     crawl_p = sub.add_parser("crawl", help="Run a crawler")
     crawl_p.add_argument(
         "target",
-        choices=["zx-official", "yugioh-official", "vanguard-official", "weiss-official", "digimon-official", "unionarena-official", "yuyutei-zx", "yuyutei-ygo", "bigweb-zx"],
+        choices=["zx-official", "yugioh-official", "vanguard-official", "weiss-official", "digimon-official", "unionarena-official", "unionarena-cn", "yuyutei-zx", "yuyutei-ygo", "yuyutei-ua", "bigweb-zx", "bigweb-ua", "torecatchi-ua"],
         help="Which crawler to run",
     )
     crawl_p.add_argument("--delay", type=float, default=1.0, help="Seconds between requests")
@@ -20,6 +46,10 @@ def main() -> None:
     crawl_p.add_argument("--debug", action="store_true", help="Enable DEBUG logging")
     crawl_p.add_argument("--db", dest="db", default=None, metavar="PATH",
                          help="DuckDB file to write to (default: data/raw.duckdb)")
+    crawl_p.add_argument("--pg-url", dest="pg_url", default=None, metavar="URL",
+                         help="PostgreSQL connection URL; writes to PostgreSQL instead of DuckDB")
+    crawl_p.add_argument("--fetch-quantity", dest="fetch_quantity", action="store_true",
+                         help="(torecatchi-ua) Fetch individual product pages to get stock quantity")
 
     # --- merge ---
     merge_p = sub.add_parser(
@@ -50,15 +80,13 @@ def main() -> None:
 
         if args.target == "zx-official":
             from crawlers.official.zx import ZXOfficialCrawler
+            from crawlers.storage import init_schema, init_zx_schema, insert_official_cards
 
             crawler = ZXOfficialCrawler(delay=args.delay)
             if args.set_code:
                 import json
-                from crawlers.storage import (
-                    get_connection, init_schema, init_zx_schema, insert_official_cards,
-                )
                 sets, rarities = crawler.crawl_metadata()
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 init_zx_schema(conn)
 
@@ -93,18 +121,19 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} card editions for set {args.set_code}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
 
         elif args.target == "yugioh-official":
             from crawlers.official.yugioh import YugiohOfficialCrawler, _init_yugioh_schema
+            from crawlers.storage import init_schema, insert_official_cards
 
             crawler = YugiohOfficialCrawler(delay=args.delay)
 
             if args.set_code:
                 import json
-                from crawlers.storage import get_connection, init_schema, insert_official_cards
-
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 _init_yugioh_schema(conn)
 
@@ -126,18 +155,19 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} card editions for set pid {args.set_code}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
 
         elif args.target == "vanguard-official":
             from crawlers.official.vanguard import VanguardOfficialCrawler, init_vanguard_schema
+            from crawlers.storage import init_schema, insert_official_cards
 
             crawler = VanguardOfficialCrawler(delay=args.delay)
 
             if args.set_code:
                 import json
-                from crawlers.storage import get_connection, init_schema, insert_official_cards
-
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 init_vanguard_schema(conn)
 
@@ -174,18 +204,19 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} card editions for set {args.set_code}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
 
         elif args.target == "digimon-official":
             from crawlers.official.digimon import DigimonOfficialCrawler, _init_digimon_schema
+            from crawlers.storage import init_schema, insert_official_cards
 
             crawler = DigimonOfficialCrawler(delay=args.delay)
 
             if args.set_code:
                 import json
-                from crawlers.storage import get_connection, init_schema, insert_official_cards
-
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 _init_digimon_schema(conn)
 
@@ -207,18 +238,19 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} card editions for category {args.set_code}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
 
         elif args.target == "unionarena-official":
             from crawlers.official.unionarena import UnionArenaOfficialCrawler, _init_unionarena_schema
+            from crawlers.storage import init_schema, insert_official_cards
 
             crawler = UnionArenaOfficialCrawler(delay=args.delay)
 
             if args.set_code:
                 import json
-                from crawlers.storage import get_connection, init_schema, insert_official_cards
-
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 _init_unionarena_schema(conn)
 
@@ -240,18 +272,27 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} card editions for series {args.set_code}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
+
+        elif args.target == "unionarena-cn":
+            from crawlers.official.unionarena_cn import UnionArenaCNTranslationCrawler
+
+            crawler = UnionArenaCNTranslationCrawler(delay=args.delay)
+            conn = _open_conn(args)
+            crawler.run_full_crawl(conn=conn)
+            conn.close()
 
         elif args.target == "weiss-official":
             from crawlers.official.weiss import WeissOfficialCrawler, _init_weiss_schema
+            from crawlers.storage import init_schema, insert_official_cards
 
             crawler = WeissOfficialCrawler(delay=args.delay)
 
             if args.set_code:
                 import json
-                from crawlers.storage import get_connection, init_schema, insert_official_cards
-
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 _init_weiss_schema(conn)
 
@@ -273,19 +314,28 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} card editions for expansion {args.set_code}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
+
+        elif args.target == "torecatchi-ua":
+            from crawlers.shops.torecatchi import TorecatchiShopCrawler
+
+            fetch_qty = getattr(args, "fetch_quantity", False)
+            crawler = TorecatchiShopCrawler(delay=args.delay, fetch_quantity=fetch_qty)
+            conn = _open_conn(args)
+            crawler.run_full_crawl(conn=conn)
+            conn.close()
 
         elif args.target == "bigweb-zx":
-            from crawlers.shops.bigweb import BigwebShopCrawler
+            from crawlers.shops.bigweb import BigwebShopCrawler, _init_bigweb_schema
+            from crawlers.storage import init_schema, insert_shop_listings
 
             crawler = BigwebShopCrawler(game_id=151, game_code="zx", tcg="zx", delay=args.delay)
 
             if args.set_code:
                 import json
-                from crawlers.storage import get_connection, init_schema, insert_shop_listings
-                from crawlers.shops.bigweb import _init_bigweb_schema
-
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 _init_bigweb_schema(conn)
 
@@ -310,24 +360,62 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} listings for set {args.set_code.upper()}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
 
-        elif args.target in ("yuyutei-zx", "yuyutei-ygo"):
-            from crawlers.shops.yuyutei import YuyuteiShopCrawler
+        elif args.target == "bigweb-ua":
+            from crawlers.shops.bigweb import BigwebShopCrawler, _init_bigweb_schema
+            from crawlers.storage import init_schema, insert_shop_listings
+
+            crawler = BigwebShopCrawler(game_id=180, game_code="ua", tcg="unionarena", delay=args.delay)
+
+            if args.set_code:
+                import json
+                conn = _open_conn(args)
+                init_schema(conn)
+                _init_bigweb_schema(conn)
+
+                batch = []
+                for listing in crawler.crawl_set(args.set_code.upper()):
+                    batch.append({
+                        "shop": listing.shop,
+                        "tcg": listing.tcg,
+                        "set_code": listing.set_code,
+                        "card_number_raw": listing.card_number_raw,
+                        "card_name_raw": listing.card_name_raw,
+                        "rarity_raw": listing.rarity_raw,
+                        "condition": listing.condition,
+                        "price": listing.price,
+                        "currency": listing.currency,
+                        "quantity": listing.quantity,
+                        "url": listing.url,
+                        "crawled_at": listing.crawled_at,
+                        "extra": json.dumps(listing.extra, ensure_ascii=False),
+                    })
+                insert_shop_listings(conn, batch)
+                conn.close()
+                print(f"Saved {len(batch)} listings for set {args.set_code.upper()}")
+            else:
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
+
+        elif args.target in ("yuyutei-zx", "yuyutei-ygo", "yuyutei-ua"):
+            from crawlers.shops.yuyutei import YuyuteiShopCrawler, _init_yuyutei_schema
+            from crawlers.storage import init_schema, insert_shop_listings
 
             game_code, tcg = {
                 "yuyutei-zx":  ("zx",  "zx"),
                 "yuyutei-ygo": ("ygo", "yugioh"),
+                "yuyutei-ua":  ("ua",  "unionarena"),
             }[args.target]
 
             crawler = YuyuteiShopCrawler(game_code=game_code, tcg=tcg, delay=args.delay)
 
             if args.set_code:
                 import json
-                from crawlers.storage import get_connection, init_schema, insert_shop_listings
-                from crawlers.shops.yuyutei import _init_yuyutei_schema
-
-                conn = get_connection(db_path)
+                conn = _open_conn(args)
                 init_schema(conn)
                 _init_yuyutei_schema(conn)
 
@@ -352,7 +440,9 @@ def main() -> None:
                 conn.close()
                 print(f"Saved {len(batch)} listings for set {args.set_code.upper()}")
             else:
-                crawler.run_full_crawl(db_path=db_path)
+                conn = _open_conn(args)
+                crawler.run_full_crawl(conn=conn)
+                conn.close()
 
     elif args.command == "merge":
         _run_merge(args)
