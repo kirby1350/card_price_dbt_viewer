@@ -100,6 +100,21 @@ _GOODS_NAME_RE = re.compile(
     r"^((?:UA|EX|PC)\d+BT/[A-Z]+-\d+-\d+)\s+([A-Z★+]+)\u3000(.+)$"
 )
 
+# Newer category pages (e.g. EX13BT) omit the card number from the listing.
+# Two sub-formats, both require fetching the product detail page for the card number:
+#   【パラレル】葛城 リーリヤ\u3000SR★★   (parallel cards)
+#   葛城 リーリヤ\u3000SR                 (regular cards, no prefix)
+# The card number appears in the product detail page H1:
+#   "葛城 リーリヤ　SR[EX13BT/GIM-2-001]"
+# Items WITHOUT \u3000{rarity} (e.g. 【AP】, 【シリアルAP】, 【青】) are skipped.
+_NEW_FORMAT_RE = re.compile(
+    r"^(?:【[^】]*】)?(.+)\u3000([A-Z★]+)$"
+)
+# Card number in brackets at end of detail-page H1
+_CARD_NO_IN_H1_RE = re.compile(
+    r"\[((?:UA|EX|PC)\d+BT/[A-Z]+-\d+-\d+(?:_p\d+)?)\]"
+)
+
 # set_code from card_number: "UA01BT" from "UA01BT/CGH-1-001"
 _SET_CODE_RE = re.compile(r"^((?:UA|EX|PC)\d+BT)")
 
@@ -113,7 +128,9 @@ _STOCK_RE = re.compile(r"在庫数(\d+)点")
 def _parse_goods_name(text: str) -> tuple[str, str, str] | None:
     """Parse a goods_name string into (card_number, rarity, card_name).
 
-    Returns None for non-standard items (promos, AP cards, deck accessories).
+    Returns None for non-standard items (promos, AP cards, deck accessories),
+    and for new-format parallel listings where the card number is absent
+    (those are handled separately via the detail page).
     """
     m = _GOODS_NAME_RE.match(text.strip())
     if not m:
@@ -220,10 +237,51 @@ class TorecatchiShopCrawler(ShopCrawler):
             name_span = item.find("span", class_="goods_name")
             if not name_span:
                 continue
-            parsed = _parse_goods_name(name_span.get_text(strip=True))
+            goods_text = name_span.get_text(strip=True)
+            parsed = _parse_goods_name(goods_text)
+
             if not parsed:
-                logger.debug("Unrecognised goods_name, skipping: %r", name_span.get_text(strip=True))
+                # Try the newer name\u3000rarity format (e.g. EX13BT regular/parallel cards).
+                # Card number is absent from the listing page — must fetch detail.
+                pm = _NEW_FORMAT_RE.match(goods_text)
+                if not pm:
+                    logger.debug("Unrecognised goods_name, skipping: %r", goods_text)
+                    continue
+                card_name_raw = pm.group(1).strip()
+                rarity_raw = pm.group(2)
+
+                # Need product URL to fetch card number
+                link = item.find("a", class_="item_data_link")
+                if not link or not link.get("href"):
+                    continue
+                href = link["href"]
+                product_url = href if href.startswith("http") else f"{BASE}{href}"
+                pid_m = re.search(r"/product/(\d+)", href)
+                product_id = int(pid_m.group(1)) if pid_m else None
+
+                card_number_raw, quantity = self._fetch_detail(product_url)
+                if not card_number_raw:
+                    logger.debug("Could not get card number from detail page %s", product_url)
+                    continue
+
+                set_code_m = _SET_CODE_RE.match(card_number_raw)
+                set_code = set_code_m.group(1) if set_code_m else None
+
+                figure = item.find("span", class_="figure")
+                price = _parse_price(figure.get_text(strip=True)) if figure else None
+                if price is None:
+                    continue
+
+                listings.append(ShopListing(
+                    shop=self.shop, tcg=self.tcg, set_code=set_code,
+                    card_number_raw=card_number_raw, card_name_raw=card_name_raw,
+                    rarity_raw=rarity_raw, condition="NM",
+                    price=price, currency="JPY", quantity=quantity,
+                    url=product_url, crawled_at=now,
+                    extra={"product_id": product_id, "category_id": category_id},
+                ))
                 continue
+
             card_number_raw, rarity_raw, card_name_raw = parsed
 
             # set_code from card_number prefix
@@ -268,17 +326,31 @@ class TorecatchiShopCrawler(ShopCrawler):
 
         return listings
 
-    def _fetch_quantity(self, url: str) -> int:
-        """Fetch a product page and return stock quantity (0 = out of stock)."""
+    def _fetch_detail(self, url: str) -> tuple[str | None, int]:
+        """Fetch a product detail page; return (card_number_or_None, quantity).
+
+        Used for new-format listings that omit the card number on the listing page.
+        """
         try:
             soup = self._get_html(url)
+            h1 = soup.find("h1")
+            card_number = None
+            if h1:
+                m = _CARD_NO_IN_H1_RE.search(h1.get_text())
+                if m:
+                    card_number = m.group(1)
             text = soup.get_text()
-            m = _STOCK_RE.search(text)
-            if m:
-                return int(m.group(1))
+            qty_m = _STOCK_RE.search(text)
+            quantity = int(qty_m.group(1)) if qty_m else 0
+            return card_number, quantity
         except Exception:
-            logger.debug("Failed to fetch quantity from %s", url)
-        return 0
+            logger.debug("Failed to fetch detail from %s", url)
+            return None, 0
+
+    def _fetch_quantity(self, url: str) -> int:
+        """Fetch a product page and return stock quantity (0 = out of stock)."""
+        _, qty = self._fetch_detail(url)
+        return qty
 
     # ------------------------------------------------------------------
     # Crawl a single category (all pages)

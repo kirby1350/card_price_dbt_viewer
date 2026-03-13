@@ -118,13 +118,16 @@ def get_set_cards(tcg: str, set_code: str) -> dict[str, Any]:
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        # Latest listing per (card_number, shop) by crawled_at
+        # Latest listing per (card_number, rarity, shop) by crawled_at.
+        # Including rarity_raw in DISTINCT ON keeps both non-parallel (e.g. SR)
+        # and parallel (e.g. SR★★) listings for the same card number separate.
         cur.execute(
             """
             WITH latest_listings AS (
-                SELECT DISTINCT ON (tcg, upper(trim(card_number_raw)), shop)
+                SELECT DISTINCT ON (tcg, upper(trim(card_number_raw)), upper(trim(rarity_raw)), shop)
                     tcg,
-                    upper(trim(card_number_raw)) AS card_number_norm,
+                    upper(trim(card_number_raw))  AS card_number_norm,
+                    upper(trim(rarity_raw))        AS rarity_norm,
                     shop,
                     price,
                     quantity,
@@ -132,7 +135,7 @@ def get_set_cards(tcg: str, set_code: str) -> dict[str, Any]:
                     crawled_at
                 FROM raw_shop_listings
                 WHERE price > 0 AND tcg = %s
-                ORDER BY tcg, upper(trim(card_number_raw)), shop, crawled_at DESC
+                ORDER BY tcg, upper(trim(card_number_raw)), upper(trim(rarity_raw)), shop, crawled_at DESC
             )
             SELECT
                 o.card_number,
@@ -154,7 +157,12 @@ def get_set_cards(tcg: str, set_code: str) -> dict[str, Any]:
             FROM raw_official_cards o
             LEFT JOIN latest_listings l
                 ON  l.tcg = o.tcg
-                AND l.card_number_norm = upper(trim(o.card_number))
+                AND l.card_number_norm = upper(trim(
+                        regexp_replace(o.card_number, '_p[0-9]+$', '', 'gi')
+                    ))
+                AND l.rarity_norm = upper(trim(
+                        regexp_replace(o.rarity_code, '_p[0-9]+$', '', 'gi')
+                    ))
             WHERE o.tcg = %s AND upper(trim(o.set_code)) = upper(trim(%s))
             GROUP BY
                 o.card_number, o.card_name, o.rarity_code,
