@@ -1,0 +1,3 @@
+# This directory contains the Evidence.dev legacy project.
+# It is NOT a runnable app in this repo — do not start a dev server here.
+# The active Next.js app is in the root of this repository.
