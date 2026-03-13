@@ -111,6 +111,12 @@ python main.py crawl cardrush-ygo       # cardrush.jp
 python main.py crawl cardrush-vanguard  # cardrush-vanguard.jp
 python main.py crawl cardrush-digimon   # cardrush-digimon.jp
 
+# Shop prices — Masters Square
+python main.py crawl mastersquare-ua    # masters-square.com (Union Arena)
+
+# Shop prices — Hobby Station
+python main.py crawl hobbystation-ua    # hobbystation-single.jp (Union Arena)
+
 # Common options
 python main.py crawl <target> --set <code>   # single set/product-group (testing)
 python main.py crawl <target> --delay 2.0    # seconds between requests (default: 1.0)
