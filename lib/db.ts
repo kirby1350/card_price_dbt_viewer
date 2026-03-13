@@ -19,7 +19,7 @@ function createPool(): Pool {
   })
 }
 
-// In development, reuse the pool across hot reloads
+// In development, reuse the pool across hot reloads to avoid exhausting connections
 export function getPool(): Pool {
   if (process.env.NODE_ENV === 'development') {
     if (!global._pgPool) {

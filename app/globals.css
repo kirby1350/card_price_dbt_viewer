@@ -38,7 +38,7 @@
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;

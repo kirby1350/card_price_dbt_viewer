@@ -8,6 +8,10 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'db.yugioh-card.com',
+      },
+      {
+        protocol: 'https',
         hostname: 'www.db.yugioh-card.com',
       },
       {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 
-interface CardPriceRow {
+interface CardRow {
   card_edition_id: string
   set_code: string
   set_name: string
@@ -10,7 +10,7 @@ interface CardPriceRow {
   rarity_code: string
   rarity_name: string
   image_url: string | null
-  shop: string
+  shop: string | null
   price: number | null
   quantity: number | null
   url: string | null
@@ -31,7 +31,7 @@ export async function GET(
   }
 
   try {
-    // Join official cards with latest shop prices
+    // Get all cards in the set, joined with the latest shop prices per listing
     const sql = `
       SELECT
         e.card_edition_id,
@@ -47,26 +47,24 @@ export async function GET(
         p.quantity,
         p.url,
         p.condition,
-        p.crawled_at
+        p.crawled_at::text AS crawled_at
       FROM (
         SELECT DISTINCT ON (tcg, card_number, rarity_code)
           md5(tcg || card_number || COALESCE(rarity_code, '')) AS card_edition_id,
           tcg,
           set_code,
-          set_name,
+          COALESCE(set_name, '') AS set_name,
           card_number,
           card_name,
-          rarity_code,
-          rarity_name,
-          numbering_scheme,
-          (extra::json->>'image_url')::text AS image_url,
-          crawled_at
+          COALESCE(rarity_code, '') AS rarity_code,
+          COALESCE(rarity_name, '') AS rarity_name,
+          (extra::json->>'image_url')::text AS image_url
         FROM raw_official_cards
         WHERE tcg = $1 AND set_code = $2
         ORDER BY tcg, card_number, rarity_code, crawled_at DESC
       ) e
       LEFT JOIN (
-        SELECT DISTINCT ON (tcg, card_number_raw, shop, condition)
+        SELECT DISTINCT ON (tcg, card_number_raw, shop, COALESCE(condition, ''))
           tcg,
           card_number_raw,
           shop,
@@ -77,15 +75,15 @@ export async function GET(
           crawled_at
         FROM raw_shop_listings
         WHERE tcg = $1
-        ORDER BY tcg, card_number_raw, shop, condition, crawled_at DESC
+        ORDER BY tcg, card_number_raw, shop, COALESCE(condition, ''), crawled_at DESC
       ) p ON p.tcg = e.tcg AND p.card_number_raw = e.card_number
-      ORDER BY e.card_number, e.rarity_code, p.shop
+      ORDER BY e.card_number, e.rarity_code, p.shop NULLS LAST
     `
 
-    const rows = await query<CardPriceRow>(sql, [tcg, setCode])
+    const rows = await query<CardRow>(sql, [tcg, setCode])
 
-    // Group by card edition: one card → multiple shop listings
-    const cardMap = new Map<string, {
+    // Group rows by card_edition_id
+    type CardEntry = {
       card_edition_id: string
       set_code: string
       set_name: string
@@ -102,12 +100,13 @@ export async function GET(
         condition: string | null
         crawled_at: string | null
       }>
-    }>()
+    }
+
+    const cardMap = new Map<string, CardEntry>()
 
     for (const row of rows) {
-      const key = row.card_edition_id
-      if (!cardMap.has(key)) {
-        cardMap.set(key, {
+      if (!cardMap.has(row.card_edition_id)) {
+        cardMap.set(row.card_edition_id, {
           card_edition_id: row.card_edition_id,
           set_code: row.set_code,
           set_name: row.set_name,
@@ -120,7 +119,7 @@ export async function GET(
         })
       }
       if (row.shop) {
-        cardMap.get(key)!.prices.push({
+        cardMap.get(row.card_edition_id)!.prices.push({
           shop: row.shop,
           price: row.price,
           quantity: row.quantity,
@@ -131,14 +130,16 @@ export async function GET(
       }
     }
 
-    // Get the last updated time for this set
-    const lastUpdatedResult = await query<{ last_updated: string }>(
-      `SELECT MAX(p.crawled_at)::text AS last_updated
-       FROM raw_shop_listings p
-       WHERE p.tcg = $1
-       AND p.card_number_raw IN (
-         SELECT DISTINCT card_number FROM raw_official_cards WHERE tcg = $1 AND set_code = $2
-       )`,
+    // Determine the last updated timestamp for this set's price data
+    const lastUpdatedResult = await query<{ last_updated: string | null }>(
+      `SELECT MAX(rsl.crawled_at)::text AS last_updated
+       FROM raw_shop_listings rsl
+       WHERE rsl.tcg = $1
+         AND rsl.card_number_raw IN (
+           SELECT DISTINCT card_number
+           FROM raw_official_cards
+           WHERE tcg = $1 AND set_code = $2
+         )`,
       [tcg, setCode]
     )
 

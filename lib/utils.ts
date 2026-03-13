@@ -32,24 +32,24 @@ export const SHOP_LABELS: Record<string, string> = {
   yuyutei: 'YuYuTei',
   bigweb: 'Bigweb',
   torecatchi: 'トレカッチ',
+  mercari: 'メルカリ',
+  rakuten: '楽天',
 }
 
 export const RARITY_COLORS: Record<string, string> = {
-  // Common rarities
-  N: 'text-muted-foreground',
-  C: 'text-muted-foreground',
-  R: 'text-blue-400',
-  SR: 'text-yellow-400',
-  RR: 'text-yellow-300',
+  N:   'text-muted-foreground',
+  C:   'text-muted-foreground',
+  R:   'text-blue-400',
+  SR:  'text-yellow-400',
+  RR:  'text-yellow-300',
   RRR: 'text-orange-400',
-  SP: 'text-pink-400',
+  SP:  'text-pink-400',
   SEC: 'text-purple-400',
-  UR: 'text-cyan-300',
+  UR:  'text-cyan-300',
   SCR: 'text-cyan-200',
-  // Alt arts (H suffix)
-  RH: 'text-blue-300',
+  RH:  'text-blue-300',
   SRH: 'text-yellow-300',
-  // Default
+  LR:  'text-red-400',
   DEFAULT: 'text-foreground',
 }
 

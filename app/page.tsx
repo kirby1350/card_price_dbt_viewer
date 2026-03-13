@@ -2,7 +2,7 @@
 
 import useSWR from 'swr'
 import { useState } from 'react'
-import { Clock, Database } from 'lucide-react'
+import { Clock, Layers } from 'lucide-react'
 import { TCGSelector } from '@/components/tcg-selector'
 import { SetSelector } from '@/components/set-selector'
 import { CardGrid } from '@/components/card-grid'
@@ -15,16 +15,13 @@ export default function HomePage() {
   const [selectedTCG, setSelectedTCG] = useState<string | null>(null)
   const [selectedSet, setSelectedSet] = useState<string | null>(null)
 
-  // Fetch TCG list (static, never changes)
   const { data: tcgs = [] } = useSWR<TCG[]>('/api/tcgs', fetcher)
 
-  // Fetch sets for selected TCG
   const { data: sets = [], isLoading: setsLoading } = useSWR<TCGSet[]>(
     selectedTCG ? `/api/tcgs/${selectedTCG}/sets` : null,
     fetcher
   )
 
-  // Fetch cards for selected set
   const { data: cardsData, isLoading: cardsLoading } = useSWR<CardsResponse>(
     selectedTCG && selectedSet
       ? `/api/tcgs/${selectedTCG}/cards?set_code=${encodeURIComponent(selectedSet)}`
@@ -37,10 +34,6 @@ export default function HomePage() {
     setSelectedSet(null)
   }
 
-  function handleSetSelect(setCode: string) {
-    setSelectedSet(setCode)
-  }
-
   const selectedSetInfo = sets.find((s) => s.set_code === selectedSet)
 
   return (
@@ -51,8 +44,8 @@ export default function HomePage() {
           {/* Top row: logo + TCG selector */}
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2 shrink-0">
-              <Database size={20} className="text-accent" />
-              <h1 className="text-base font-bold text-foreground tracking-tight">
+              <Layers size={18} className="text-accent" />
+              <h1 className="text-sm font-bold text-foreground tracking-tight whitespace-nowrap">
                 TCG Price Viewer
               </h1>
             </div>
@@ -65,56 +58,56 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Second row: set selector (shown after TCG is selected) */}
+          {/* Second row: set selector */}
           {selectedTCG && (
-            <div className="flex flex-col gap-2">
-              <SetSelector
-                sets={sets}
-                selected={selectedSet}
-                onSelect={handleSetSelect}
-                isLoading={setsLoading}
-              />
-            </div>
+            <SetSelector
+              sets={sets}
+              selected={selectedSet}
+              onSelect={setSelectedSet}
+              isLoading={setsLoading}
+            />
           )}
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1 max-w-screen-2xl mx-auto w-full px-4 py-4">
+      <main className="flex-1 max-w-screen-2xl mx-auto w-full px-4 py-5">
         {!selectedTCG ? (
-          <div className="flex flex-col items-center justify-center py-32 text-muted-foreground">
-            <Database size={48} className="mb-4 opacity-30" />
-            <p className="text-xl font-medium">请选择卡牌游戏</p>
-            <p className="text-sm mt-1">在左上角选择游戏种类以开始浏览</p>
+          <div className="flex flex-col items-center justify-center py-40 text-muted-foreground">
+            <Layers size={48} className="mb-4 opacity-20" />
+            <p className="text-xl font-semibold text-foreground">请选择卡牌游戏</p>
+            <p className="text-sm mt-2">在上方选择游戏种类以开始浏览价格</p>
           </div>
         ) : !selectedSet ? (
-          <div className="flex flex-col items-center justify-center py-32 text-muted-foreground">
-            <p className="text-xl font-medium">请选择系列</p>
-            <p className="text-sm mt-1">
-              {setsLoading ? '正在加载系列列表…' : `共 ${sets.length} 个系列`}
+          <div className="flex flex-col items-center justify-center py-40 text-muted-foreground">
+            <p className="text-xl font-semibold text-foreground">请选择系列</p>
+            <p className="text-sm mt-2">
+              {setsLoading ? '正在加载系列列表…' : `共 ${sets.length} 个系列可选`}
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {/* Set info bar */}
-            <div className="flex items-center justify-between gap-4 flex-wrap">
+            {/* Set header bar */}
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <h2 className="text-lg font-bold text-foreground">
-                  <span className="font-mono text-accent mr-2">{selectedSet}</span>
+                <h2 className="text-lg font-bold text-foreground flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-accent">{selectedSet}</span>
                   {selectedSetInfo?.set_name && (
-                    <span>{selectedSetInfo.set_name}</span>
+                    <span className="font-sans font-semibold">{selectedSetInfo.set_name}</span>
                   )}
                 </h2>
-                {cardsData && (
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    共 {cardsData.cards.length} 张卡牌
-                  </p>
-                )}
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {cardsLoading
+                    ? '正在加载卡牌数据…'
+                    : cardsData
+                      ? `共 ${cardsData.cards.length} 张卡牌`
+                      : ''}
+                </p>
               </div>
               {cardsData?.last_updated && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border px-3 py-1.5 rounded">
                   <Clock size={12} />
-                  <span>最后更新：{formatDate(cardsData.last_updated)}</span>
+                  <span>价格更新：{formatDate(cardsData.last_updated)}</span>
                 </div>
               )}
             </div>
