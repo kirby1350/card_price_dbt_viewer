@@ -1,49 +1,35 @@
 """Weiss Schwarz official card list crawler — ws-tcg.com (Japanese).
 
-URL structure
--------------
-  Expansion list : GET  https://ws-tcg.com/cardlist/
-  Card search    : POST https://ws-tcg.com/cardlist/search
-                   body: _method=POST&cmd=search&expansion=NNN
-  Pagination     : GET  https://ws-tcg.com/cardlist/search?page=N
-                   (POST sets search context; subsequent GET pages navigate it)
+API structure (the cardlist page is now a JS app backed by a JSON API)
+----------------------------------------------------------------------
+  Filter options : GET  https://ws-tcg.com/manage/CardListUser/filter-options
+                   → JSON with `expansions` (id, name, …), `cardKinds`, etc.
+  Card search    : GET  https://ws-tcg.com/manage/CardListUser/searchJson
+                   params: expansion=NNN&page=N
+                   → JSON { items: [...], total, page, limit, page_count }
+                   `limit` is fixed server-side (25); paginate via `page_count`.
 
-HTML structure — card search results (table.search-result-table)
------------------------------------------------------------------
-  <tr>
-    <th>
-      <a href="/cardlist/?cardno=IM/S07-001">
-        <img src="/wordpress/wp-content/images/cardlist/i/im_s07/im_s07_001.png">
-      </a>
-    </th>
-    <td>
-      <h4>サイトウ真美 (IM/S07-001)</h4>
-      <dl>
-        <dt>サイド</dt><dd><img src="...schwarz.png"></dd>
-        <dt>種類</dt><dd>キャラ</dd>
-        <dt>レベル</dt><dd>0</dd>
-        <dt>色</dt><dd><img src="...yellow.png"></dd>
-        <dt>パワー</dt><dd>1500</dd>
-        <dt>ソウル</dt><dd><img...></dd>
-        <dt>コスト</dt><dd>0</dd>
-        <dt>レアリティ</dt><dd>C</dd>
-        <dt>トリガー</dt><dd>-</dd>
-        <dt>特徴</dt><dd>音楽・アイドル</dd>
-        <dt>フレーバー</dt><dd>...</dd>
-      </dl>
-      <p class="ability">...</p>
-    </td>
-  </tr>
+searchJson item fields
+----------------------
+  card_number   "DDD/S129-001"        rare        "RR"
+  card_name     "呪いの衝突 オカルン"   card_kind   "2"  (code → name via cardKinds)
+  level / cost / power                  side        "-2"
+  color         "[[yellow.gif]]"        soul        "[[soul.gif]]"
+  card_trigger  "-"                     parallel_param "〇" for parallels/SP
+  feature1/2/3  trait fragments         text        rules text
+  flavor                                picture     "d/ddd_s129/ddd_s129_001.png"
 
 Key design decisions
 ---------------------
-  numbering_scheme : "unique_per_rarity" — SP variants carry a distinct card number
-                     suffix (e.g. IM/S07-001 C and IM/S07-001S SR are separate rows).
+  numbering_scheme : "unique_per_rarity" — SP/parallel variants carry a distinct
+                     card number suffix (e.g. DDD/S129-001 RR, -001S SR, -001SSP SSP
+                     are separate items with their own card_number).
   card_base_id     : card_number with any trailing letter suffix stripped, so
-                     IM/S07-001S groups back to IM/S07-001.
-  set_code         : prefix before the dash: "IM/S07-001" → "IM/S07".
-  All card data is available on the search results page; no per-card detail fetches.
-  Expansion IDs are passed as set_code when using --set (e.g. --set 29).
+                     DDD/S129-001S groups back to DDD/S129-001.
+  set_code         : prefix before the dash: "DDD/S129-001" → "DDD/S129".
+  image_url        : IMAGE_BASE + `picture`.
+  All card data is available on the search results JSON; no per-card detail fetches.
+  Expansion IDs are passed as set_code when using --set (e.g. --set 551).
 """
 
 import json
@@ -54,7 +40,6 @@ from dataclasses import dataclass
 from typing import Iterator
 
 import requests
-from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 from crawlers.official.base import OfficialCard, OfficialCrawler
@@ -63,22 +48,25 @@ from crawlers.storage import DB_PATH, get_connection, init_schema, insert_offici
 logger = logging.getLogger(__name__)
 
 WS_BASE = "https://ws-tcg.com"
-CARDLIST_URL = f"{WS_BASE}/cardlist/"
-SEARCH_URL = f"{WS_BASE}/cardlist/search"
+API_BASE = f"{WS_BASE}/manage/CardListUser"
+FILTER_OPTIONS_URL = f"{API_BASE}/filter-options"
+SEARCH_JSON_URL = f"{API_BASE}/searchJson"
+IMAGE_BASE = f"{WS_BASE}/wordpress/wp-content/images/cardlist/"
 
 HEADERS = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "ja,en;q=0.9",
+    "X-Requested-With": "XMLHttpRequest",
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     ),
 }
 
-# IM/S07-001 or IM/S07-001S (SP variant) etc.
-_CARD_NO_RE = re.compile(r"^([A-Za-z0-9]+/[A-Za-z0-9\-]+)-\d+[A-Za-z]?$")
 # Strip trailing non-digit suffix from the number portion
 _BASE_ID_RE = re.compile(r"^(.*-\d+)[A-Za-z]+$")
+# Image-token markup the API uses for color/soul, e.g. "[[yellow.gif]]"
+_IMG_TOKEN_RE = re.compile(r"\[\[([^\]]+?)\]\]")
 
 
 @dataclass
@@ -111,6 +99,25 @@ def _card_base_id(card_number: str) -> str:
     return m.group(1) if m else card_number
 
 
+def _clean_markup(value: str) -> str:
+    """Reduce image-token markup to filename stems.
+
+    '[[yellow.gif]]'           → 'yellow'
+    '[[soul.gif]][[soul.gif]]' → 'soul,soul'
+    plain text                 → returned stripped
+    """
+    tokens = _IMG_TOKEN_RE.findall(value or "")
+    if tokens:
+        return ",".join(t.rsplit(".", 1)[0] for t in tokens)
+    return (value or "").strip()
+
+
+def _join_traits(*features: str) -> str:
+    """Combine feature1/2/3 into '音楽・アイドル', dropping blanks and '-'."""
+    parts = [f.strip() for f in features if f and f.strip() and f.strip() != "-"]
+    return "・".join(parts)
+
+
 class WeissOfficialCrawler(OfficialCrawler):
     """Official card crawler for the Japanese Weiss Schwarz card database."""
 
@@ -121,24 +128,18 @@ class WeissOfficialCrawler(OfficialCrawler):
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
         self._expansions: list[WSExpansion] = []
+        # card_kind code (e.g. "2") → display name (e.g. "キャラ")
+        self._card_kind_map: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # HTTP helpers
     # ------------------------------------------------------------------
 
-    def _get(self, url: str, params: dict | None = None) -> BeautifulSoup:
+    def _get_json(self, url: str, params: dict | None = None) -> dict:
         resp = self.session.get(url, params=params, timeout=30)
         resp.raise_for_status()
-        resp.encoding = "utf-8"
         time.sleep(self.delay)
-        return BeautifulSoup(resp.text, "lxml")
-
-    def _post(self, url: str, data: dict) -> BeautifulSoup:
-        resp = self.session.post(url, data=data, timeout=30)
-        resp.raise_for_status()
-        resp.encoding = "utf-8"
-        time.sleep(self.delay)
-        return BeautifulSoup(resp.text, "lxml")
+        return resp.json()
 
     # ------------------------------------------------------------------
     # Expansion discovery
@@ -151,127 +152,37 @@ class WeissOfficialCrawler(OfficialCrawler):
 
     def _fetch_expansions(self) -> list[WSExpansion]:
         logger.info("Fetching Weiss Schwarz expansion list")
-        soup = self._get(CARDLIST_URL)
-        select = soup.find("select", {"name": "expansion"})
-        if not select:
-            logger.error("Could not find expansion select element on %s", CARDLIST_URL)
-            return []
+        data = self._get_json(FILTER_OPTIONS_URL)
+
+        # Cache card-kind code → name lookup for card parsing.
+        self._card_kind_map = {
+            str(k.get("value", "")): k.get("name", "")
+            for k in data.get("cardKinds", [])
+        }
+
         expansions = []
-        for opt in select.find_all("option"):
-            val = opt.get("value", "").strip()
-            if not val or not val.isdigit():
+        for e in data.get("expansions", []):
+            if str(e.get("disp_flg", "1")) in ("0", "False", "false"):
                 continue
-            expansions.append(WSExpansion(
-                expansion_id=int(val),
-                set_name=opt.get_text(strip=True),
-            ))
+            name = (e.get("name") or "").strip()
+            try:
+                exp_id = int(e["id"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            expansions.append(WSExpansion(expansion_id=exp_id, set_name=name))
         logger.info("Found %d expansions", len(expansions))
         return expansions
-
-    # ------------------------------------------------------------------
-    # Card parsing (search results page)
-    # ------------------------------------------------------------------
-
-    def _parse_card_rows(self, soup: BeautifulSoup) -> list[dict]:
-        table = soup.find("table", class_="search-result-table")
-        if not table:
-            return []
-        tbody = table.find("tbody")
-        if not tbody:
-            return []
-
-        rows = []
-        for tr in tbody.find_all("tr"):
-            th = tr.find("th")
-            td = tr.find("td")
-            if not td:
-                continue
-
-            # Image URL
-            image_url = ""
-            if th:
-                img = th.find("img")
-                if img:
-                    src = img.get("src", "")
-                    image_url = f"{WS_BASE}{src}" if src.startswith("/") else src
-
-            # Card number + name from h4: "サイトウ真美 (IM/S07-001)"
-            h4 = td.find("h4")
-            card_number = ""
-            card_name = ""
-            if h4:
-                text = h4.get_text(strip=True)
-                m = re.search(r"\(([^)]+)\)\s*$", text)
-                if m:
-                    card_number = m.group(1).strip()
-                    card_name = text[: m.start()].strip()
-                else:
-                    card_name = text
-
-            # Fallback: card number from th link href
-            if not card_number and th:
-                a = th.find("a")
-                if a:
-                    href = a.get("href", "")
-                    cm = re.search(r"cardno=([^&]+)", href)
-                    if cm:
-                        card_number = cm.group(1).strip()
-
-            if not card_number:
-                continue
-
-            # Parse dl key→value pairs
-            kv: dict[str, str] = {}
-            dl = td.find("dl")
-            if dl:
-                dts = dl.find_all("dt")
-                dds = dl.find_all("dd")
-                for dt, dd in zip(dts, dds):
-                    key = dt.get_text(strip=True)
-                    imgs = dd.find_all("img")
-                    if imgs:
-                        # Represent image-based values by filename stem (side, color, soul, trigger)
-                        parts = []
-                        for img in imgs:
-                            src = img.get("src", "")
-                            stem_m = re.search(r"/([^/]+)\.\w+$", src)
-                            parts.append(stem_m.group(1) if stem_m else "")
-                        kv[key] = ",".join(parts)
-                    else:
-                        kv[key] = dd.get_text(strip=True)
-
-            effect_el = td.find("p", class_="ability")
-            effect = effect_el.get_text(strip=True) if effect_el else ""
-
-            rows.append({
-                "card_number": card_number,
-                "card_name": card_name,
-                "rarity": kv.get("レアリティ", ""),
-                "side": kv.get("サイド", ""),
-                "card_type": kv.get("種類", ""),
-                "level": kv.get("レベル", ""),
-                "color": kv.get("色", ""),
-                "power": kv.get("パワー", ""),
-                "soul": kv.get("ソウル", ""),
-                "cost": kv.get("コスト", ""),
-                "trigger": kv.get("トリガー", ""),
-                "traits": kv.get("特徴", ""),
-                "flavor": kv.get("フレーバー", ""),
-                "effect": effect,
-                "image_url": image_url,
-            })
-        return rows
 
     # ------------------------------------------------------------------
     # OfficialCrawler interface
     # ------------------------------------------------------------------
 
     def crawl_cards(self, set_code: str) -> Iterator[OfficialCard]:
-        """Crawl cards for an expansion. Pass expansion_id as set_code (e.g. '29')."""
+        """Crawl cards for an expansion. Pass expansion_id as set_code (e.g. '551')."""
         list(self.crawl_sets())
         if not set_code.isdigit():
             logger.error(
-                "weiss-official --set requires a numeric expansion_id (e.g. --set 29)"
+                "weiss-official --set requires a numeric expansion_id (e.g. --set 551)"
             )
             return
         matched = [e for e in self._expansions if e.expansion_id == int(set_code)]
@@ -280,69 +191,68 @@ class WeissOfficialCrawler(OfficialCrawler):
             return
         yield from self._crawl_expansion(matched[0])
 
+    def _fetch_expansion_items(self, expansion_id: int) -> list[dict]:
+        """Fetch all card items for an expansion, paginating via page_count."""
+        items: list[dict] = []
+        page = 1
+        while True:
+            data = self._get_json(
+                SEARCH_JSON_URL, params={"expansion": str(expansion_id), "page": page}
+            )
+            page_items = data.get("items", [])
+            items.extend(page_items)
+            page_count = data.get("page_count") or 1
+            if page >= page_count or not page_items:
+                break
+            page += 1
+        return items
+
     def _crawl_expansion(self, exp: WSExpansion) -> Iterator[OfficialCard]:
         logger.info("Crawling expansion %d — %s", exp.expansion_id, exp.set_name)
 
-        # Initiate search via POST
-        soup = self._post(SEARCH_URL, data={
-            "_method": "POST",
-            "cmd": "search",
-            "expansion": str(exp.expansion_id),
-        })
+        items = self._fetch_expansion_items(exp.expansion_id)
+        logger.info("  %d cards found", len(items))
 
-        all_rows: list[dict] = []
-        page = 1
-        while True:
-            rows = self._parse_card_rows(soup)
-            if not rows:
-                break
-            all_rows.extend(rows)
+        for item in tqdm(items, desc=exp.set_name[:40], unit="card", leave=False):
+            card_number = (item.get("card_number") or "").strip()
+            if not card_number:
+                continue
 
-            # Find next page link (<p class="pager"> … <span class="next"><a>)
-            pager = soup.find("p", class_="pager")
-            next_href = None
-            if pager:
-                next_span = pager.find("span", class_="next")
-                if next_span:
-                    a = next_span.find("a")
-                    if a:
-                        next_href = a.get("href", "")
-            if not next_href:
-                break
+            rarity = (item.get("rare") or "").strip()
+            picture = (item.get("picture") or "").strip()
+            image_url = f"{IMAGE_BASE}{picture}" if picture else ""
+            card_kind_code = str(item.get("card_kind", ""))
 
-            page += 1
-            next_url = f"{WS_BASE}{next_href}" if next_href.startswith("/") else next_href
-            soup = self._get(next_url)
-
-        logger.info("  %d cards found in %d page(s)", len(all_rows), page)
-
-        for row in tqdm(all_rows, desc=exp.set_name[:40], unit="card", leave=False):
-            card_number = row["card_number"]
             yield OfficialCard(
                 tcg=self.tcg,
                 set_code=_extract_set_code(card_number),
                 set_name=exp.set_name,
                 card_number=card_number,
-                card_name=row["card_name"],
-                rarity_code=row["rarity"],
-                rarity_name=row["rarity"],
+                card_name=(item.get("card_name") or "").strip(),
+                rarity_code=rarity,
+                rarity_name=rarity,
                 numbering_scheme="unique_per_rarity",
                 card_base_id=_card_base_id(card_number),
-                image_url=row["image_url"],
+                image_url=image_url,
                 extra={
                     "expansion_id": exp.expansion_id,
-                    "side": row["side"],
-                    "card_type": row["card_type"],
-                    "level": row["level"],
-                    "color": row["color"],
-                    "power": row["power"],
-                    "soul": row["soul"],
-                    "cost": row["cost"],
-                    "trigger": row["trigger"],
-                    "traits": row["traits"],
-                    "flavor": row["flavor"],
-                    "effect": row["effect"],
-                    "image_url": row["image_url"],
+                    "side": str(item.get("side", "")),
+                    "card_type": self._card_kind_map.get(card_kind_code, card_kind_code),
+                    "level": str(item.get("level", "")),
+                    "color": _clean_markup(item.get("color", "")),
+                    "power": str(item.get("power", "")),
+                    "soul": _clean_markup(item.get("soul", "")),
+                    "cost": str(item.get("cost", "")),
+                    "trigger": _clean_markup(item.get("card_trigger", "")),
+                    "traits": _join_traits(
+                        item.get("feature1", ""),
+                        item.get("feature2", ""),
+                        item.get("feature3", ""),
+                    ),
+                    "flavor": (item.get("flavor") or "").strip(),
+                    "effect": (item.get("text") or "").strip(),
+                    "parallel": item.get("parallel_param", ""),
+                    "image_url": image_url,
                 },
             )
 

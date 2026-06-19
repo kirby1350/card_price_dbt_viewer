@@ -502,7 +502,7 @@ class VanguardOfficialCrawler(OfficialCrawler):
         logger.info("Full crawl complete")
 
 
-def init_vanguard_schema(conn: duckdb.DuckDBPyConnection) -> None:
+def init_vanguard_schema(conn) -> None:  # conn: DuckDB or PgAdapter
     """Create Vanguard-specific metadata table if it doesn't exist."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS vanguard_sets (
