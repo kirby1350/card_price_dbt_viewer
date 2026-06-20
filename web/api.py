@@ -46,6 +46,7 @@ SHOP_DISPLAY: dict[str, str] = {
     "cardrush-vanguard": "カードラッシュ",
     "mastersquare":      "マスターズスクウェア",
     "hobbystation":      "ホビーステーション",
+    "fukufuku":          "福福トレカ",
 }
 
 SHOP_COLOR: dict[str, str] = {
@@ -57,6 +58,7 @@ SHOP_COLOR: dict[str, str] = {
     "cardrush-vanguard": "#dc2626",
     "mastersquare":      "#7c3aed",
     "hobbystation":      "#0891b2",
+    "fukufuku":          "#db2777",
 }
 
 # ---------------------------------------------------------------------------

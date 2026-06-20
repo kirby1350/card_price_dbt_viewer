@@ -38,7 +38,7 @@ def main() -> None:
     crawl_p = sub.add_parser("crawl", help="Run a crawler")
     crawl_p.add_argument(
         "target",
-        choices=["zx-official", "yugioh-official", "vanguard-official", "weiss-official", "digimon-official", "unionarena-official", "unionarena-cn", "yuyutei-zx", "yuyutei-ygo", "yuyutei-ua", "bigweb-zx", "bigweb-ua", "torecatchi-ua", "mastersquare-ua", "hobbystation-ua"],
+        choices=["zx-official", "yugioh-official", "vanguard-official", "weiss-official", "digimon-official", "unionarena-official", "unionarena-cn", "yuyutei-zx", "yuyutei-ygo", "yuyutei-ua", "bigweb-zx", "bigweb-ua", "torecatchi-ua", "mastersquare-ua", "hobbystation-ua", "fukufuku-ua", "fukufuku-ygo", "fukufuku-weiss"],
         help="Which crawler to run",
     )
     crawl_p.add_argument("--delay", type=float, default=1.0, help="Seconds between requests")
@@ -413,6 +413,19 @@ def main() -> None:
             from crawlers.shops.hobbystation import HobbystationShopCrawler
 
             crawler = HobbystationShopCrawler(delay=args.delay)
+            conn = _open_conn(args)
+            crawler.run_full_crawl(conn=conn)
+            conn.close()
+
+        elif args.target in ("fukufuku-ua", "fukufuku-ygo", "fukufuku-weiss"):
+            from crawlers.shops.fukufuku import FukufukuShopCrawler
+
+            tcg = {
+                "fukufuku-ua":    "unionarena",
+                "fukufuku-ygo":   "yugioh",
+                "fukufuku-weiss": "weiss",
+            }[args.target]
+            crawler = FukufukuShopCrawler(tcg=tcg, delay=args.delay)
             conn = _open_conn(args)
             crawler.run_full_crawl(conn=conn)
             conn.close()

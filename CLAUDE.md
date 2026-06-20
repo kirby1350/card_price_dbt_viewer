@@ -88,6 +88,7 @@ The official card list is always the source of truth for canonical rarity names.
 | `crawlers/shops/base.py` | `ShopListing` dataclass + `ShopCrawler` ABC |
 | `crawlers/shops/mastersquare.py` | Masters Square crawler (Union Arena) |
 | `crawlers/shops/hobbystation.py` | Hobby Station crawler (Union Arena) |
+| `crawlers/shops/fukufuku.py` | Fukufuku Toreka crawler (UA / Yu-Gi-Oh / Weiss; colorme, one subdomain per game) |
 | `crawlers/storage.py` | DuckDB write helpers; DB at `data/raw.duckdb` |
 | `dbt/models/intermediate/int_card_editions.sql` | Core identity model |
 | `dbt/models/intermediate/int_shop_prices_matched.sql` | Rarity matching logic |
@@ -128,6 +129,11 @@ python main.py crawl mastersquare-ua    # masters-square.com (Union Arena)
 
 # Shop prices — Hobby Station
 python main.py crawl hobbystation-ua    # hobbystation-single.jp (Union Arena)
+
+# Shop prices — Fukufuku Toreka (one colorme storefront per game/subdomain)
+python main.py crawl fukufuku-ua        # uniari.fukufukutoreka.com (Union Arena)
+python main.py crawl fukufuku-ygo       # yugioh.fukufukutoreka.com (Yu-Gi-Oh)
+python main.py crawl fukufuku-weiss     # weis.fukufukutoreka.com (Weiss Schwarz)
 
 # Common options
 python main.py crawl <target> --set <code>   # single set/product-group (testing)
